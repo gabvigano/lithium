@@ -1,6 +1,7 @@
 use crate::ecs::{self, components}; //, entities};
 
 pub struct World {
+    pub start_pos: ecs::SparseSet<components::Pos>,
     pub pos: ecs::SparseSet<components::Pos>,
     pub vel: ecs::SparseSet<components::Vel>,
     pub acc: ecs::SparseSet<components::Acc>,
@@ -19,6 +20,7 @@ pub struct World {
 impl World {
     pub fn new() -> Self {
         Self {
+            start_pos: ecs::SparseSet::new(),
             pos: ecs::SparseSet::new(),
             vel: ecs::SparseSet::new(),
             acc: ecs::SparseSet::new(),

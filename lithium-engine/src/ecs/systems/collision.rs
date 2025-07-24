@@ -219,7 +219,7 @@ pub fn compute_collision(world: &mut World) -> Vec<(entities::Entity, entities::
                     y: pos_2.y + vel_2.y,
                 }
             } else {
-                pos_2.clone()
+                *pos_2
             };
 
             // check collision
