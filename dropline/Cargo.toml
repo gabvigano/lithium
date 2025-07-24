@@ -1,0 +1,8 @@
+[package]
+name = "dropline"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+macroquad = "0.4"
+lithium-engine = { path = "../lithium-engine" }
