@@ -75,9 +75,12 @@ pub fn check_circle_circle(
     if delta_x * delta_x + delta_y * delta_y <= radius_sum * radius_sum {
         // compute square distance to improve performance
         // since it is colliding, compute angle
-        Some(components::Angle {
-            radians: delta_y.atan2(delta_x),
-        })
+        Some(
+            components::Angle {
+                radians: delta_y.atan2(delta_x),
+            }
+            .norm(),
+        )
     } else {
         // since is not colliding, return None
         None
@@ -130,9 +133,12 @@ pub fn check_circle_rect(
     if delta_x * delta_x + delta_y * delta_y <= radius * radius {
         // compute square distance to improve performance
         // since it is colliding, compute angle
-        Some(components::Angle {
-            radians: delta_y.atan2(delta_x),
-        })
+        Some(
+            components::Angle {
+                radians: delta_y.atan2(delta_x),
+            }
+            .norm(),
+        )
     } else {
         // since is not colliding, return None
         None
@@ -266,33 +272,27 @@ pub fn simulate_collisions(
             .0
             .min(world.elast.get(entity_2).expect("missing restitution").0);
 
-        let vel_1 = world.vel.get(entity_1).expect("missing velocity for a dynamic object");
-        let vel_1_normal = vel_1.x * normal_x + vel_1.y * normal_y;
+        let vel_1 = world
+            .vel
+            .get(entity_1)
+            .expect("missing velocity for a dynamic object")
+            .clone();
 
+        let vel_1_normal = vel_1.x * normal_x + vel_1.y * normal_y;
         let vel_1_tangent = vel_1.x * tangent_x + vel_1.y * tangent_y;
 
-        if let Some(vel_2) = world.vel.get(entity_2) {
+        let vel_1_normal_post = if let Some(vel_2) = world.vel.get(entity_2) {
             // dynamic-dynamic collision
             let vel_2_normal = vel_2.x * normal_x + vel_2.y * normal_y;
-
             let vel_2_tangent = vel_2.x * tangent_x + vel_2.y * tangent_y;
 
             let mass_1 = world.mass.get(entity_1).expect("missing mass").0;
             let mass_2 = world.mass.get(entity_2).expect("missing mass").0;
 
             let vel_1_normal_post =
-                ((vel_1_normal * (mass_1 - mass_2) + 2.0 * mass_2 * vel_2_normal) / (mass_1 + mass_2)) * elast;
+                (vel_1_normal * (mass_1 - elast * mass_2) + (1.0 + elast) * mass_2 * vel_2_normal) / (mass_1 + mass_2);
             let vel_2_normal_post =
-                ((vel_2_normal * (mass_2 - mass_1) + 2.0 * mass_1 * vel_1_normal) / (mass_1 + mass_2)) * elast;
-
-            let new_vel_1 = components::Vel {
-                x: vel_1_normal_post * normal_x + vel_1_tangent * tangent_x,
-                y: mask_below_eps(
-                    vel_1_normal_post * normal_y + vel_1_tangent * tangent_y,
-                    vel_1.y,
-                    rest_eps,
-                ),
-            };
+                (vel_2_normal * (mass_2 - elast * mass_1) + (1.0 + elast) * mass_1 * vel_1_normal) / (mass_1 + mass_2);
 
             let new_vel_2 = components::Vel {
                 x: vel_2_normal_post * normal_x + vel_2_tangent * tangent_x,
@@ -303,19 +303,24 @@ pub fn simulate_collisions(
                 ),
             };
 
-            world.vel.set(entity_1, new_vel_1);
             world.vel.set(entity_2, new_vel_2);
+            vel_1_normal_post
         } else {
             // dynamic-static collision
             let vel_1_normal_post = -vel_1_normal * elast;
+            vel_1_normal_post
+        };
 
-            let new_vel_1 = components::Vel {
-                x: vel_1_normal_post * normal_x + vel_1_tangent * tangent_x,
-                y: vel_1_normal_post * normal_y + vel_1_tangent * tangent_y,
-            };
+        let new_vel_1 = components::Vel {
+            x: vel_1_normal_post * normal_x + vel_1_tangent * tangent_x,
+            y: mask_below_eps(
+                vel_1_normal_post * normal_y + vel_1_tangent * tangent_y,
+                vel_1.y,
+                rest_eps,
+            ),
+        };
 
-            world.vel.set(entity_1, new_vel_1);
-        }
+        world.vel.set(entity_1, new_vel_1);
     }
 }
 

@@ -43,7 +43,7 @@ async fn main() {
 
     // create player
     let player = entity_manager.create();
-    world.start_pos.insert(player, components::Pos { x: 200.0, y: 100.0 });
+    world.start_pos.insert(player, components::Pos { x: 190.0, y: 100.0 });
     world
         .pos
         .insert(player, *world.start_pos.get(player).expect("missing start position"));
@@ -103,7 +103,7 @@ async fn main() {
         // update world and camera
         physics::update_vel(&mut world);
         let collisions = collision::compute_collision(&mut world);
-        physics::reset_rest(&mut world);
+        physics::reset_rest(&mut world); // rest is updated in physics::simulate_collisions()
         collision::simulate_collisions(&mut world, collisions);
         physics::update_pos(&mut world);
 
@@ -155,7 +155,7 @@ async fn main() {
         //     true,
         // );
 
-        //td::thread::sleep(std::time::Duration::from_millis(250));
+        // std::thread::sleep(std::time::Duration::from_millis(250));
         prelude::next_frame().await;
     }
 }

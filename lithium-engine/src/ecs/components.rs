@@ -45,6 +45,13 @@ pub struct Angle {
     pub radians: f32,
 }
 
+impl Angle {
+    pub fn norm(mut self) -> Self {
+        self.radians = self.radians.rem_euclid(std::f32::consts::PI * 2.0);
+        self
+    }
+}
+
 #[derive(Debug)]
 pub enum Axis {
     Horizontal,
