@@ -108,7 +108,9 @@ pub fn check_circle_rect(
     let delta_top = centre_y - top;
     let delta_bottom = bottom - centre_y;
 
-    let (closest_x, closest_y) = if centre_x < left || centre_x > right || centre_y < top || centre_y > bottom {
+    let centre_outside = centre_x < left || centre_x > right || centre_y < top || centre_y > bottom;
+
+    let (closest_x, closest_y) = if centre_outside {
         // centre is outside the rectangle, use standard clamp
         (centre_x.clamp(left, right), centre_y.clamp(top, bottom))
     } else {
@@ -130,7 +132,7 @@ pub fn check_circle_rect(
         (centre_x - closest_x, centre_y - closest_y)
     };
 
-    if delta_x * delta_x + delta_y * delta_y <= radius * radius {
+    if !centre_outside || delta_x * delta_x + delta_y * delta_y <= radius * radius {
         // compute square distance to improve performance
         // since it is colliding, compute angle
         Some(

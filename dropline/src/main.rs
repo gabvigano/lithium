@@ -99,6 +99,9 @@ async fn main() {
             physics::reset_vel(&mut world, components::Vel { x: 0.0, y: 0.0 });
             physics::reset_acc(&mut world, components::Acc { x: 0.0, y: 0.0 });
         }
+        if prelude::is_key_down(prelude::KeyCode::P) {
+            panic!("user panicked")
+        }
 
         // update world and camera
         physics::update_vel(&mut world);
