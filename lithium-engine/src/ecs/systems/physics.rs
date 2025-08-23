@@ -3,6 +3,14 @@ use crate::{
     world::World,
 };
 
+pub const EPS: f32 = 1e-6;
+pub const EPS_SQR: f32 = EPS * EPS;
+
+#[inline(always)]
+pub fn pow2(x: f32) -> f32 {
+    x * x
+}
+
 fn clamp_toward_zero(value: f32, limit: Option<f32>) -> f32 {
     if limit.is_none() {
         value
@@ -28,13 +36,13 @@ pub fn reset_pos(world: &mut World) {
     }
 }
 
-pub fn reset_vel(world: &mut World, new_vel: components::Vel) {
+pub fn reset_vel(world: &mut World, new_vel: components::Vec2) {
     for (_, vel) in world.vel.iter_mut() {
         *vel = new_vel;
     }
 }
 
-pub fn reset_acc(world: &mut World, new_acc: components::Acc) {
+pub fn reset_acc(world: &mut World, new_acc: components::Vec2) {
     for (_, acc) in world.acc.iter_mut() {
         *acc = new_acc;
     }
@@ -43,8 +51,7 @@ pub fn reset_acc(world: &mut World, new_acc: components::Acc) {
 pub fn update_pos(world: &mut World) {
     for (entity, pos) in world.pos.iter_mut() {
         if let Some(vel) = world.vel.get(entity) {
-            pos.x += vel.x;
-            pos.y += vel.y;
+            pos.add_inplace(*vel);
         }
     }
 }
@@ -52,8 +59,7 @@ pub fn update_pos(world: &mut World) {
 pub fn update_vel(world: &mut World) {
     for (entity, vel) in world.vel.iter_mut() {
         if let Some(acc) = world.acc.get(entity) {
-            vel.x += acc.x;
-            vel.y += acc.y;
+            vel.add_inplace(*acc);
         }
     }
 }
@@ -71,19 +77,13 @@ pub fn apply_vel(
         components::Axis::Horizontal => {
             world.vel.set(
                 entity,
-                components::Vel {
-                    x: clamp_toward_zero(current.x + new_vel, limit),
-                    y: current.y,
-                },
+                components::Vec2::new(clamp_toward_zero(current.x + new_vel, limit), current.y),
             );
         }
         components::Axis::Vertical => {
             world.vel.set(
                 entity,
-                components::Vel {
-                    x: current.x,
-                    y: clamp_toward_zero(current.y + new_vel, limit),
-                },
+                components::Vec2::new(current.x, clamp_toward_zero(current.y + new_vel, limit)),
             );
         }
     }

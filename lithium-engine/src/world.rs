@@ -1,10 +1,10 @@
 use crate::ecs::{self, components}; //, entities};
 
 pub struct World {
-    pub start_pos: ecs::SparseSet<components::Pos>,
-    pub pos: ecs::SparseSet<components::Pos>,
-    pub vel: ecs::SparseSet<components::Vel>,
-    pub acc: ecs::SparseSet<components::Acc>,
+    pub start_pos: ecs::SparseSet<components::Vec2>,
+    pub pos: ecs::SparseSet<components::Vec2>,
+    pub vel: ecs::SparseSet<components::Vec2>,
+    pub acc: ecs::SparseSet<components::Vec2>,
     pub force: ecs::SparseSet<components::Force>,
     pub rest: ecs::SparseSet<components::Rest>,
     pub mass: ecs::SparseSet<components::Mass>,

@@ -10,7 +10,7 @@ use lithium_engine::{
 
 use macroquad::prelude;
 
-const GRAVITY: components::Acc = components::Acc { x: 0.0, y: 0.25 };
+const GRAVITY: components::Vec2 = components::Vec2 { x: 0.0, y: 0.25 };
 // const GROUND_FRICTION: f32 = 0.15;
 // const AIR_FRICTION: f32 = 0.015;
 // const SWING_FRICTION: f32 = 0.0015;
@@ -43,37 +43,27 @@ async fn main() {
 
     // create player
     let player = entity_manager.create();
-    world.start_pos.insert(player, components::Pos { x: 190.0, y: 100.0 });
+    world.start_pos.insert(player, components::Vec2::new(190.0, 100.0));
     world
         .pos
         .insert(player, *world.start_pos.get(player).expect("missing start position"));
-    world.vel.insert(player, components::Vel { x: 0.0, y: 0.0 });
-    world.acc.insert(player, components::Acc { x: 0.0, y: 0.0 });
+    world.vel.insert(player, components::Vec2::new(0.0, 0.0));
+    world.acc.insert(player, components::Vec2::new(0.0, 0.0));
     world.rest.insert(player, false);
-    world.mass.insert(player, components::Mass(1.0));
-    world.elast.insert(player, components::Elast(0.5));
+    world.mass.insert(player, components::Mass::new(1.0));
+    world.elast.insert(player, components::Elast::new(0.5));
     world
         .shape
-        .insert(player, components::Shape::Circle(components::Circle { radius: 10.0 }));
-    world.color.insert(
-        player,
-        components::Color {
-            r: 0,
-            g: 255,
-            b: 0,
-            a: 255,
-        },
-    );
-    world.layer.insert(player, components::Layer(2));
+        //.insert(player, components::Shape::Circle(components::Circle::new(10.0)));
+        .insert(player, components::Shape::Rect(components::Rect::new(20.0, 20.0)));
+    world.color.insert(player, components::Color::new(0, 255, 0, 255));
+    world.layer.insert(player, components::Layer::new(2));
     world.show.insert(player, true);
 
     // create camera
     let mut camera = scene::Camera::new(
-        components::Pos { x: 0.0, y: -100.0 },
-        components::Rect {
-            width: prelude::screen_width(),
-            height: prelude::screen_height(),
-        },
+        components::Vec2::new(0.0, -100.0),
+        components::Rect::new(prelude::screen_width(), prelude::screen_height()),
     );
 
     // game loop
@@ -96,8 +86,8 @@ async fn main() {
         }
         if prelude::is_key_down(prelude::KeyCode::R) {
             physics::reset_pos(&mut world);
-            physics::reset_vel(&mut world, components::Vel { x: 0.0, y: 0.0 });
-            physics::reset_acc(&mut world, components::Acc { x: 0.0, y: 0.0 });
+            physics::reset_vel(&mut world, components::Vec2::new(0.0, 0.0));
+            physics::reset_acc(&mut world, components::Vec2::new(0.0, 0.0));
         }
         if prelude::is_key_down(prelude::KeyCode::P) {
             panic!("user panicked")
@@ -105,9 +95,9 @@ async fn main() {
 
         // update world and camera
         physics::update_vel(&mut world);
-        let collisions = collision::compute_collision(&mut world);
         physics::reset_rest(&mut world); // rest is updated in physics::simulate_collisions()
-        collision::simulate_collisions(&mut world, collisions);
+        let collisions = collision::detect_collisions(&mut world);
+        collision::compute_collisions(&mut world, collisions);
         physics::update_pos(&mut world);
 
         camera.update(world.pos.get(player).expect("missing position"));
@@ -158,7 +148,7 @@ async fn main() {
         //     true,
         // );
 
-        // std::thread::sleep(std::time::Duration::from_millis(250));
+        // std::thread::sleep(std::time::Duration::from_millis(500));
         prelude::next_frame().await;
     }
 }

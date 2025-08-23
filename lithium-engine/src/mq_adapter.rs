@@ -17,8 +17,8 @@ pub fn color_to_mq(color: &components::Color) -> prelude::Color {
 
 pub fn render(world: &world::World, entity: entities::Entity, camera: &scene::Camera) {
     if *world.show.get(entity).expect("missing show") {
-        let components::Pos { x, y } = world.pos.get(entity).expect("missing position");
-        let components::Pos { x: cam_x, y: cam_y } = camera.pos();
+        let components::Vec2 { x, y } = world.pos.get(entity).expect("missing position");
+        let components::Vec2 { x: cam_x, y: cam_y } = camera.pos();
 
         match world.shape.get(entity).expect("missing shape") {
             components::Shape::Rect(rect) => prelude::draw_rectangle(

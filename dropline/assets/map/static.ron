@@ -3,7 +3,7 @@
         pos: (x: 0.0, y: 500.0),
         elast: (1.0),
         shape: Rect(
-            (width: 1500.0, height: 150.0)
+            (width: 1500.0, height: 1.0)
         ),
         color: (r: 255, g: 255, b: 255, a: 255),
         layer: (0),

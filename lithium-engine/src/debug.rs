@@ -11,7 +11,7 @@ pub fn display(msgs: &[String]) {
 }
 
 pub fn render_vector(
-    start_pos: &components::Pos,
+    start_pos: &components::Vec2,
     vec_x: f32,
     vec_y: f32,
     camera: &scene::Camera,

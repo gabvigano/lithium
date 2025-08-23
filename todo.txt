@@ -1,0 +1,24 @@
+# collisions
+[ ] implement continuous detection for currently supported shapes
+
+# system update
+[x] review the usage of traits for custom types
+[x] review the usage of clone(), copied(), *...
+[x] implement common methods for custom types (new()...) and replace current usage with them
+[ ] refactor code (rename variables and functions, write comments and docstring)
+
+# collisions
+[ ] rebuild the collision algorithm
+[ ] solve dynamic-dynamic collisions bugs (should be solved with the point above). I believe the bug is caused by dynamic_rect-dynamic_rect continuos collision detection
+
+# rendering
+[ ] render objects following layers
+
+# project management
+[ ] add license
+
+# collisions
+[ ] stabilize collision detector (hardcode values to counteract approximations)
+
+# system update
+[ ] look for optimizations
