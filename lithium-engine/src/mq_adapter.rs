@@ -1,5 +1,5 @@
 use crate::{ecs::components, scene, world};
-use macroquad::prelude;
+use macroquad::{math, prelude};
 
 #[inline]
 pub fn color_to_mq(color: components::Color) -> prelude::Color {
@@ -38,6 +38,21 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
             };
 
             match shape {
+                components::Shape::Segment(segment) => prelude::draw_line(
+                    pos.x + segment.a.x - cam_x,
+                    pos.y + segment.a.y - cam_y,
+                    pos.x + segment.b.x - cam_x,
+                    pos.y + segment.b.y - cam_y,
+                    1.0,
+                    color_to_mq(material.color),
+                ),
+
+                components::Shape::Triangle(triangle) => prelude::draw_triangle(
+                    math::Vec2::new(pos.x + triangle.a.x - cam_x, pos.y + triangle.a.y - cam_y),
+                    math::Vec2::new(pos.x + triangle.b.x - cam_x, pos.y + triangle.b.y - cam_y),
+                    math::Vec2::new(pos.x + triangle.c.x - cam_x, pos.y + triangle.c.y - cam_y),
+                    color_to_mq(material.color),
+                ),
                 components::Shape::Rect(rect) => prelude::draw_rectangle(
                     pos.x - cam_x,
                     pos.y - cam_y,
@@ -51,7 +66,19 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
                     circle.radius,
                     color_to_mq(material.color),
                 ),
-                _ => unimplemented!(),
+                components::Shape::Polygon(polygon) => {
+                    for i in 0..(polygon.verts.len() - 1) {
+                        prelude::draw_triangle(
+                            math::Vec2::new(pos.x + polygon.verts[0].x - cam_x, pos.y + polygon.verts[0].y - cam_y),
+                            math::Vec2::new(pos.x + polygon.verts[i].x - cam_x, pos.y + polygon.verts[i].y - cam_y),
+                            math::Vec2::new(
+                                pos.x + polygon.verts[i + 1].x - cam_x,
+                                pos.y + polygon.verts[i + 1].y - cam_y,
+                            ),
+                            color_to_mq(material.color),
+                        )
+                    }
+                }
             }
         }
     }

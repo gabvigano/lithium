@@ -27,4 +27,5 @@
 [ ] refactor code (rename variables and functions, write comments and docstring)
 
 # rendering
-[ ] render more complex objects (segment, triangle, polygon)
+[x] render more complex objects (segment, triangle, polygon)
+[x] correctly update vertices for segment, triangle and polygon

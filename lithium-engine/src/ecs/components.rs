@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::ecs::systems::physics::{EPS, EPS_SQR, pow2};
+use crate::ecs::systems::physics::{EPS, pow2};
 
 #[derive(Copy, Clone, Deserialize, Debug)]
 pub struct Vec2 {
@@ -277,6 +277,7 @@ impl ToHitBox for Shape {
     }
 }
 
+/// notice that a and b are local positions, you may need to manually integrate them with a position
 #[derive(Clone, Deserialize, Debug)]
 pub struct Segment {
     pub a: Vec2,
@@ -452,6 +453,7 @@ impl ToHitBox for Segment {
 //     }
 // }
 
+/// notice that a, b and c are local positions, you may need to manually integrate them with a position
 #[derive(Clone, Deserialize, Debug)]
 pub struct Triangle {
     pub a: Vec2,
@@ -538,18 +540,19 @@ pub struct Polygon {
     pub verts: Vec<Vec2>,
 }
 
+/// notice that vertices are local positions, you may need to manually integrate them with a position
 impl Polygon {
     #[inline]
     pub fn new(verts: Vec<Vec2>) -> Self {
         let polygon = Self { verts };
-        if !polygon.is_convex() {
-            panic!("polygon is not convex, which is not currently supported");
+        if !polygon.is_valid() {
+            panic!("polygon is not valid");
         }
 
         polygon
     }
 
-    pub fn is_convex(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         let verts_len = self.verts.len();
 
         if verts_len < 3 {
@@ -591,7 +594,7 @@ impl Polygon {
                 if (positive_sign && cross < -EPS) || (!positive_sign && cross > EPS) {
                     // wrong sign
                     panic!(
-                        "cross between ({};{}) and ({};{}) has the wrong sign (expected {}), got {}",
+                        "cross between ({};{}) and ({};{}) has the wrong sign (expected {}, got {})",
                         i,
                         i1,
                         i1,
