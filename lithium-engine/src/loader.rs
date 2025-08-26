@@ -16,12 +16,10 @@ pub fn load_static_map(
         let entity = entity_manager.create();
         entities.push(entity);
 
-        world.pos.insert(entity, obj.pos);
-        world.elast.insert(entity, obj.elast);
+        world.transform.insert(entity, obj.transform);
+        world.collider.insert(entity, obj.collider);
         world.shape.insert(entity, obj.shape);
-        world.color.insert(entity, obj.color);
-        world.layer.insert(entity, obj.layer);
-        world.show.insert(entity, obj.show);
+        world.material.insert(entity, obj.material);
     }
 
     entities
@@ -40,17 +38,11 @@ pub fn load_dynamic_map(
         let entity = entity_manager.create();
         entities.push(entity);
 
-        world.start_pos.insert(entity, obj.pos);
-        world.pos.insert(entity, obj.pos);
-        world.vel.insert(entity, obj.vel);
-        world.acc.insert(entity, obj.acc);
-        world.rest.insert(entity, obj.rest);
-        world.mass.insert(entity, obj.mass);
-        world.elast.insert(entity, obj.elast);
+        world.transform.insert(entity, obj.transform);
+        world.rigid_body.insert(entity, obj.rigid_body);
+        world.collider.insert(entity, obj.collider);
         world.shape.insert(entity, obj.shape);
-        world.color.insert(entity, obj.color);
-        world.layer.insert(entity, obj.layer);
-        world.show.insert(entity, obj.show);
+        world.material.insert(entity, obj.material);
     }
 
     entities

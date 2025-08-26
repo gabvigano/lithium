@@ -1,22 +1,44 @@
 [
     (
-        pos: (x: 0.0, y: 500.0),
-        elast: (1.0),
-        shape: Rect(
-            (width: 1500.0, height: 1.0)
+        transform: (
+            spawn: (x: 0.0, y: 500.0),
+            pos:   (x: 0.0, y: 500.0),
+            angle: (radians: 0.0),
         ),
-        color: (r: 255, g: 255, b: 255, a: 255),
-        layer: (0),
-        show: true,
+        collider: (
+            hitbox: (width: 1500.0, height: 1.0),
+            corrupted: false,
+            elast: 1.0,
+        ),
+        shape: Rect((
+            width: 1500.0,
+            height: 1.0,
+        )),
+        material: (
+            color: (r: 255, g: 255, b: 255, a: 255),
+            layer: 0,
+            show: true,
+        ),
     ),
     (
-        pos: (x: -350.0, y: 550.0),
-        elast: (1.0),
-        shape: Rect(
-            (width: 300.0, height: 150.0)
+        transform: (
+            spawn: (x: -350.0, y: 550.0),
+            pos:   (x: -350.0, y: 550.0),
+            angle: (radians: 0.0),
         ),
-        color: (r: 255, g: 255, b: 255, a: 255),
-        layer: (0),
-        show: true,
+        collider: (
+            hitbox: (width: 300.0, height: 150.0),
+            corrupted: false,
+            elast: 1.0,
+        ),
+        shape: Rect((
+            width: 300.0,
+            height: 150.0,
+        )),
+        material: (
+            color: (r: 255, g: 255, b: 255, a: 255),
+            layer: 0,
+            show: true,
+        ),
     )
 ]

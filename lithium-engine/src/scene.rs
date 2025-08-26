@@ -27,11 +27,11 @@ impl Camera {
 
     #[inline]
     pub fn screen_size(&self) -> components::Rect {
-        self.screen_size
+        self.screen_size.clone()
     }
 
     #[inline]
-    pub fn update(&mut self, focus: &components::Vec2) {
+    pub fn update(&mut self, focus: components::Vec2) {
         self.pos.x = focus.x + self.rel_pos.x - (self.screen_size.width / 2.0);
         self.pos.y = focus.y + self.rel_pos.y - (self.screen_size.height / 2.0);
     }

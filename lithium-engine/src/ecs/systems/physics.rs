@@ -11,6 +11,7 @@ pub fn pow2(x: f32) -> f32 {
     x * x
 }
 
+#[inline]
 fn clamp_toward_zero(value: f32, limit: Option<f32>) -> f32 {
     if limit.is_none() {
         value
@@ -24,43 +25,47 @@ fn clamp_toward_zero(value: f32, limit: Option<f32>) -> f32 {
     }
 }
 
+#[inline]
 pub fn reset_rest(world: &mut World) {
-    for (_, rest) in world.rest.iter_mut() {
-        *rest = false;
+    for (_, rigid_body) in world.rigid_body.iter_mut() {
+        rigid_body.rest = false;
     }
 }
 
+#[inline]
 pub fn reset_pos(world: &mut World) {
-    for (entity, start_pos) in world.start_pos.iter() {
-        world.pos.set(entity, *start_pos);
+    for (_, transform) in world.transform.iter_mut() {
+        transform.reset_pos();
     }
 }
 
+#[inline]
 pub fn reset_vel(world: &mut World, new_vel: components::Vec2) {
-    for (_, vel) in world.vel.iter_mut() {
-        *vel = new_vel;
+    for (_, rigid_body) in world.rigid_body.iter_mut() {
+        rigid_body.reset_vel(new_vel);
     }
 }
 
+#[inline]
 pub fn reset_acc(world: &mut World, new_acc: components::Vec2) {
-    for (_, acc) in world.acc.iter_mut() {
-        *acc = new_acc;
+    for (_, rigid_body) in world.rigid_body.iter_mut() {
+        rigid_body.reset_acc(new_acc);
     }
 }
 
+#[inline]
 pub fn update_pos(world: &mut World) {
-    for (entity, pos) in world.pos.iter_mut() {
-        if let Some(vel) = world.vel.get(entity) {
-            pos.add_inplace(*vel);
+    for (entity, transform) in world.transform.iter_mut() {
+        if let Some(components::RigidBody { vel, .. }) = world.rigid_body.get(entity) {
+            transform.pos.add_inplace(*vel);
         }
     }
 }
 
+#[inline]
 pub fn update_vel(world: &mut World) {
-    for (entity, vel) in world.vel.iter_mut() {
-        if let Some(acc) = world.acc.get(entity) {
-            vel.add_inplace(*acc);
-        }
+    for (_, rigid_body) in world.rigid_body.iter_mut() {
+        rigid_body.vel.add_inplace(rigid_body.acc);
     }
 }
 
@@ -71,39 +76,40 @@ pub fn apply_vel(
     limit: Option<f32>,
     axis: components::Axis,
 ) {
-    let current = world.vel.get(entity).expect("missing velocity");
-
     match axis {
         components::Axis::Horizontal => {
-            world.vel.set(
-                entity,
-                components::Vec2::new(clamp_toward_zero(current.x + new_vel, limit), current.y),
-            );
+            world
+                .rigid_body
+                .get_mut(entity)
+                .expect("missing rigid_body")
+                .vel
+                .add_scalar_inplace(clamp_toward_zero(new_vel, limit), 0.0);
         }
         components::Axis::Vertical => {
-            world.vel.set(
-                entity,
-                components::Vec2::new(current.x, clamp_toward_zero(current.y + new_vel, limit)),
-            );
+            world
+                .rigid_body
+                .get_mut(entity)
+                .expect("missing rigid_body")
+                .vel
+                .add_scalar_inplace(0.0, clamp_toward_zero(new_vel, limit));
         }
     }
 }
 
 pub fn apply_force(world: &mut World, entity: entities::Entity, new_force: components::Force) {
-    let mass = world.mass.get(entity).expect("missing mass").0;
-    let acc = world.acc.get_mut(entity).expect("missing accelleration");
+    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
 
     match new_force.dir {
         components::Dir::Angle(components::Angle { radians }) => {
-            acc.x += new_force.mag * radians.cos() / mass;
-            acc.y += new_force.mag * radians.sin() / mass;
+            rigid_body.acc.x += new_force.mag * radians.cos() / rigid_body.mass;
+            rigid_body.acc.y += new_force.mag * radians.sin() / rigid_body.mass;
         }
         components::Dir::Axis(axis) => match axis {
             components::Axis::Horizontal => {
-                acc.x += new_force.mag / mass;
+                rigid_body.acc.x += new_force.mag / rigid_body.mass;
             }
             components::Axis::Vertical => {
-                acc.y += new_force.mag / mass;
+                rigid_body.acc.y += new_force.mag / rigid_body.mass;
             }
         },
     }

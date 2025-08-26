@@ -1,39 +1,21 @@
-use crate::ecs::{self, components}; //, entities};
+use crate::ecs::{self, components};
 
 pub struct World {
-    pub start_pos: ecs::SparseSet<components::Vec2>,
-    pub pos: ecs::SparseSet<components::Vec2>,
-    pub vel: ecs::SparseSet<components::Vec2>,
-    pub acc: ecs::SparseSet<components::Vec2>,
-    pub force: ecs::SparseSet<components::Force>,
-    pub rest: ecs::SparseSet<components::Rest>,
-    pub mass: ecs::SparseSet<components::Mass>,
-    pub elast: ecs::SparseSet<components::Elast>,
-    pub dir: ecs::SparseSet<components::Dir>,
-
+    pub transform: ecs::SparseSet<components::Transform>,
+    pub rigid_body: ecs::SparseSet<components::RigidBody>,
+    pub collider: ecs::SparseSet<components::Collider>,
     pub shape: ecs::SparseSet<components::Shape>,
-    pub color: ecs::SparseSet<components::Color>,
-    pub layer: ecs::SparseSet<components::Layer>,
-    pub show: ecs::SparseSet<components::Show>,
+    pub material: ecs::SparseSet<components::Material>,
 }
 
 impl World {
     pub fn new() -> Self {
         Self {
-            start_pos: ecs::SparseSet::new(),
-            pos: ecs::SparseSet::new(),
-            vel: ecs::SparseSet::new(),
-            acc: ecs::SparseSet::new(),
-            force: ecs::SparseSet::new(),
-            rest: ecs::SparseSet::new(),
-            mass: ecs::SparseSet::new(),
-            elast: ecs::SparseSet::new(),
-            dir: ecs::SparseSet::new(),
-
+            transform: ecs::SparseSet::new(),
+            rigid_body: ecs::SparseSet::new(),
+            collider: ecs::SparseSet::new(),
             shape: ecs::SparseSet::new(),
-            color: ecs::SparseSet::new(),
-            layer: ecs::SparseSet::new(),
-            show: ecs::SparseSet::new(),
+            material: ecs::SparseSet::new(),
         }
     }
 }

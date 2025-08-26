@@ -2,7 +2,7 @@ use lithium_engine::{
     debug,
     ecs::{
         components, entities,
-        systems::{collision, physics},
+        systems::{/*collision,*/ physics},
     },
     loader, mq_adapter, scene,
     world::World,
@@ -11,10 +11,6 @@ use lithium_engine::{
 use macroquad::prelude;
 
 const GRAVITY: components::Vec2 = components::Vec2 { x: 0.0, y: 0.25 };
-// const GROUND_FRICTION: f32 = 0.15;
-// const AIR_FRICTION: f32 = 0.015;
-// const SWING_FRICTION: f32 = 0.0015;
-// const ROPE_SPEED: usize = 40;
 
 fn get_window_config() -> prelude::Conf {
     prelude::Conf {
@@ -43,22 +39,33 @@ async fn main() {
 
     // create player
     let player = entity_manager.create();
-    world.start_pos.insert(player, components::Vec2::new(190.0, 100.0));
-    world
-        .pos
-        .insert(player, *world.start_pos.get(player).expect("missing start position"));
-    world.vel.insert(player, components::Vec2::new(0.0, 0.0));
-    world.acc.insert(player, components::Vec2::new(0.0, 0.0));
-    world.rest.insert(player, false);
-    world.mass.insert(player, components::Mass::new(1.0));
-    world.elast.insert(player, components::Elast::new(0.5));
-    world
-        .shape
-        //.insert(player, components::Shape::Circle(components::Circle::new(10.0)));
-        .insert(player, components::Shape::Rect(components::Rect::new(20.0, 20.0)));
-    world.color.insert(player, components::Color::new(0, 255, 0, 255));
-    world.layer.insert(player, components::Layer::new(2));
-    world.show.insert(player, true);
+    let player_spawn = components::Vec2::new(250.00, 100.0);
+    let player_radius = 10.0;
+    world.transform.insert(
+        player,
+        components::Transform::new(player_spawn, player_spawn, components::Angle { radians: 0.0 }),
+    );
+    world.rigid_body.insert(
+        player,
+        components::RigidBody::new(
+            components::Vec2::new(0.0, 0.0),
+            components::Vec2::new(0.0, 0.0),
+            1.0,
+            false,
+        ),
+    );
+    world.collider.insert(
+        player,
+        components::Collider::new(components::HitBox::new(2.0 * player_radius, 2.0 * player_radius), 0.5),
+    );
+    world.shape.insert(
+        player,
+        components::Shape::Circle(components::Circle::new(player_radius)),
+    );
+    world.material.insert(
+        player,
+        components::Material::new(components::Color::new(0, 255, 0, 255), 2, true),
+    );
 
     // create camera
     let mut camera = scene::Camera::new(
@@ -75,7 +82,7 @@ async fn main() {
         physics::reset_acc(&mut world, GRAVITY);
 
         // handle user inputs
-        if prelude::is_key_down(prelude::KeyCode::W) && *world.rest.get(player).expect("missing rest") {
+        if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).expect("missing rigid_body").rest {
             physics::apply_vel(&mut world, player, -12.0, Some(-12.0), components::Axis::Vertical);
         }
         if prelude::is_key_down(prelude::KeyCode::D) {
@@ -96,22 +103,14 @@ async fn main() {
         // update world and camera
         physics::update_vel(&mut world);
         physics::reset_rest(&mut world); // rest is updated in physics::simulate_collisions()
-        let collisions = collision::detect_collisions(&mut world);
-        collision::compute_collisions(&mut world, collisions);
+        // let collisions = collision::detect_collisions(&mut world);
+        // collision::compute_collisions(&mut world, collisions);
         physics::update_pos(&mut world);
 
-        camera.update(world.pos.get(player).expect("missing position"));
+        camera.update(world.transform.get(player).expect("missing transform").pos);
 
         // render entities
-        for map_obj in &static_map {
-            mq_adapter::render(&mut world, *map_obj, &camera);
-        }
-
-        for map_obj in &dynamic_map {
-            mq_adapter::render(&mut world, *map_obj, &camera);
-        }
-
-        mq_adapter::render(&mut world, player, &camera);
+        mq_adapter::render(&mut world, &camera);
 
         // render text
         prelude::draw_text(
@@ -122,31 +121,12 @@ async fn main() {
             prelude::WHITE,
         );
 
-        // prelude::draw_text(
-        //     &format!("vel_x: {}", world.vel.get(player).expect("missing velocity").x),
-        //     world.pos.get(player).expect("missing position").x - camera.pos().x,
-        //     world.pos.get(player).expect("missing position").y - 25.0 - camera.pos().y,
-        //     25.0,
-        //     prelude::GREEN,
-        // );
-
         debug::display(&[
             format!("player_id: {:?}", player),
-            format!("player_rest: {:?}", world.rest.get(player)),
-            format!("player_pos: {:?}", world.pos.get(player)),
-            format!("player_vel: {:?}", world.vel.get(player)),
-            format!("player_acc: {:?}", world.acc.get(player)),
+            format!("player_transform: {:?}", world.transform.get(player)),
+            format!("player_rigid_body: {:?}", world.rigid_body.get(player)),
             // String::from("----------------------------------------"),
         ]);
-
-        // debug::render_vector(
-        //     world.pos.get(player).expect("missing pos"),
-        //     world.vel.get(player).expect("missing vel").x * 20.0,
-        //     world.vel.get(player).expect("missing vel").y * 20.0,
-        //     &camera,
-        //     prelude::GREEN,
-        //     true,
-        // );
 
         // std::thread::sleep(std::time::Duration::from_millis(500));
         prelude::next_frame().await;

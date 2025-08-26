@@ -5,14 +5,15 @@
 [x] review the usage of traits for custom types
 [x] review the usage of clone(), copied(), *...
 [x] implement common methods for custom types (new()...) and replace current usage with them
-[ ] refactor code (rename variables and functions, write comments and docstring)
+[x] wrap components around wider components (e.g. Material contains Color, Layer, Show...)
 
 # collisions
 [ ] rebuild the collision algorithm
 [ ] solve dynamic-dynamic collisions bugs (should be solved with the point above). I believe the bug is caused by dynamic_rect-dynamic_rect continuos collision detection
 
 # rendering
-[ ] render objects following layers
+[x] render objects following layers
+[ ] implement Display for components
 
 # project management
 [ ] add license
@@ -22,3 +23,8 @@
 
 # system update
 [ ] look for optimizations
+[ ] better exception handling with Result instead of panic
+[ ] refactor code (rename variables and functions, write comments and docstring)
+
+# rendering
+[ ] render more complex objects (segment, triangle, polygon)

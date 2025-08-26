@@ -80,4 +80,12 @@ impl<T> SparseSet<T> {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (entities::Entity, &mut T)> {
         self.entities.iter().cloned().zip(self.components.iter_mut())
     }
+
+    pub fn get_ents(&self) -> Vec<entities::Entity> {
+        self.entities.clone()
+    }
+
+    pub fn get_ref(&self) -> &Vec<T> {
+        &self.components
+    }
 }
