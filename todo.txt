@@ -1,6 +1,3 @@
-# collisions
-[ ] implement continuous detection for currently supported shapes
-
 # system update
 [x] review the usage of traits for custom types
 [x] review the usage of clone(), copied(), *...
@@ -8,8 +5,13 @@
 [x] wrap components around wider components (e.g. Material contains Color, Layer, Show...)
 
 # collisions
-[ ] rebuild the collision algorithm
-[ ] solve dynamic-dynamic collisions bugs (should be solved with the point above). I believe the bug is caused by dynamic_rect-dynamic_rect continuos collision detection
+[x] rebuild the collision algorithm
+[ ] make the collision algorithm work (recursion goes in stackoverflow)
+[ ] implement collision support for all shapes
+
+# system update
+[ ] remove the collider component, keep only elast because the hitbox is generated during collisions handling
+[ ] for Vec2 differentiate the perp() method for clockwise and counterclockwise direction
 
 # rendering
 [x] render objects following layers
@@ -22,10 +24,16 @@
 [ ] stabilize collision detector (hardcode values to counteract approximations)
 
 # system update
-[ ] look for optimizations
+[ ] look for optimizations:
+        - in collisions we may prefer a slice as input to convex_hull()
+        - in collisions, we can use an algorithm faster than the monotone chain algorithm when the polygons translate without rotating.
+        - in collisions, we can implement triangles and rectangles as special cases.
 [ ] better exception handling with Result instead of panic
 [ ] refactor code (rename variables and functions, write comments and docstring)
 
 # rendering
 [x] render more complex objects (segment, triangle, polygon)
 [x] correctly update vertices for segment, triangle and polygon
+
+# physics
+[ ] more realistic physics with friction

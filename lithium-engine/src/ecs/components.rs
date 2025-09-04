@@ -15,6 +15,11 @@ impl Vec2 {
     }
 
     #[inline]
+    pub fn equal(self, vec2: Self) -> bool {
+        self.x == vec2.x && self.y == vec2.y
+    }
+
+    #[inline]
     pub fn add(self, vec2: Self) -> Self {
         Self::new(self.x + vec2.x, self.y + vec2.y)
     }
@@ -92,6 +97,53 @@ impl Vec2 {
     }
 
     #[inline]
+    pub fn norm(self) -> Self {
+        let mag = self.mag();
+        Self::new(self.x / mag, self.y / mag)
+    }
+
+    #[inline]
+    pub fn norm_inplace(&mut self) {
+        let mag = self.mag();
+        self.x /= mag;
+        self.y /= mag;
+    }
+
+    #[inline]
+    pub fn neg(self) -> Self {
+        Self::new(-self.x, -self.y)
+    }
+
+    #[inline]
+    pub fn neg_inplace(&mut self) {
+        self.x = -self.x;
+        self.y = -self.y;
+    }
+
+    #[inline]
+    pub fn abs(self) -> Self {
+        Self::new(self.x.abs(), self.y.abs())
+    }
+
+    #[inline]
+    pub fn abs_inplace(&mut self) {
+        self.x = self.x.abs();
+        self.y = self.y.abs();
+    }
+
+    #[inline]
+    pub fn perp(self) -> Self {
+        Self::new(-self.y, self.x)
+    }
+
+    #[inline]
+    pub fn perp_inplace(&mut self) {
+        let x = self.x;
+        self.x = -self.y;
+        self.y = x;
+    }
+
+    #[inline]
     pub fn dot(self, vec2: Self) -> f32 {
         self.x.mul_add(vec2.x, self.y * vec2.y)
     }
@@ -99,6 +151,11 @@ impl Vec2 {
     #[inline]
     pub fn cross(self, vec2: Self) -> f32 {
         self.x * vec2.y - self.y * vec2.x
+    }
+
+    #[inline]
+    pub fn signed_area(self, q: Self, r: Self) -> f32 {
+        (q.sub(self)).cross(r.sub(self))
     }
 
     #[inline]
@@ -117,12 +174,12 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn len(self) -> f32 {
-        self.square_len().sqrt()
+    pub fn mag(self) -> f32 {
+        self.square_mag().sqrt()
     }
 
     #[inline]
-    pub fn square_len(self) -> f32 {
+    pub fn square_mag(self) -> f32 {
         pow2(self.x) + pow2(self.y)
     }
 }
@@ -503,6 +560,18 @@ impl Rect {
 
         Self { width, height }
     }
+
+    pub fn top_right(&self) -> Vec2 {
+        Vec2::new(self.width, 0.0)
+    }
+
+    pub fn bottom_left(&self) -> Vec2 {
+        Vec2::new(0.0, self.height)
+    }
+
+    pub fn bottom_right(&self) -> Vec2 {
+        Vec2::new(self.width, self.height)
+    }
 }
 
 impl ToHitBox for Rect {
@@ -535,12 +604,13 @@ impl ToHitBox for Circle {
     }
 }
 
+/// polygons must be convex, vertices must be stored counterclockwise, and there must be no collinear edges
+/// notice that vertices are local positions, you may need to manually integrate them with a position
 #[derive(Clone, Deserialize, Debug)]
 pub struct Polygon {
     pub verts: Vec<Vec2>,
 }
 
-/// notice that vertices are local positions, you may need to manually integrate them with a position
 impl Polygon {
     #[inline]
     pub fn new(verts: Vec<Vec2>) -> Self {
@@ -572,7 +642,6 @@ impl Polygon {
         }
 
         // check if the polygon is convex
-        let mut positive_sign = true; // it should be always reinitialize, I'm assigning it here so the compiler doesn't complain
         for i in 0..verts_len {
             let i1 = (i + 1) % verts_len; // use modulo indexing to restart when the end is reached
             let i2 = (i + 2) % verts_len;
@@ -581,28 +650,11 @@ impl Polygon {
             let b = self.verts[i2].sub(self.verts[i1]);
             let cross = a.cross(b);
 
-            if i == 0 {
-                // first iteration, define the sign
-                positive_sign = if cross > EPS {
-                    true
-                } else if cross < -EPS {
-                    false
-                } else {
-                    panic!("({};{}) and ({};{}) are collinear", i, i1, i1, i2)
-                };
-            } else {
-                if (positive_sign && cross < -EPS) || (!positive_sign && cross > EPS) {
-                    // wrong sign
-                    panic!(
-                        "cross between ({};{}) and ({};{}) has the wrong sign (expected {}, got {})",
-                        i,
-                        i1,
-                        i1,
-                        i2,
-                        if positive_sign { "positive" } else { "negative" },
-                        cross
-                    );
-                }
+            if cross <= EPS {
+                panic!(
+                    "({}-{}) and ({}-{}) are collinear or clockwise but they must be counterclockwise",
+                    i, i1, i1, i2
+                );
             }
         }
         true

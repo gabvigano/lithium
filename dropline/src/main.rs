@@ -1,8 +1,9 @@
 use lithium_engine::{
     debug,
     ecs::{
-        components, entities,
-        systems::{/*collision,*/ physics},
+        components::{self, ToHitBox},
+        entities,
+        systems::{collisions, physics},
     },
     loader, mq_adapter, scene,
     world::World,
@@ -34,13 +35,12 @@ async fn main() {
     let mut world = World::new();
 
     // load game map
-    let static_map = loader::load_static_map("assets/map/static.ron", &mut world, &mut entity_manager);
-    let dynamic_map = loader::load_dynamic_map("assets/map/dynamic.ron", &mut world, &mut entity_manager);
+    let _static_map = loader::load_static_map("assets/map/static.ron", &mut world, &mut entity_manager);
+    let _dynamic_map = loader::load_dynamic_map("assets/map/dynamic.ron", &mut world, &mut entity_manager);
 
     // create player
     let player = entity_manager.create();
-    let player_spawn = components::Vec2::new(250.0, 100.0);
-    let player_radius = 10.0;
+    let player_spawn = components::Vec2::new(250.0, 400.0);
     world.transform.insert(
         player,
         components::Transform::new(player_spawn, player_spawn, components::Angle { radians: 0.0 }),
@@ -54,13 +54,14 @@ async fn main() {
             false,
         ),
     );
-    world.collider.insert(
-        player,
-        components::Collider::new(components::HitBox::new(2.0 * player_radius, 2.0 * player_radius), 0.5),
-    );
     world.shape.insert(
         player,
-        components::Shape::Circle(components::Circle::new(player_radius)),
+        // components::Shape::Circle(components::Circle::new(10.0)),
+        components::Shape::Rect(components::Rect::new(15.0, 15.0)),
+    );
+    world.collider.insert(
+        player,
+        components::Collider::new(world.shape.get(player).expect("missing shape").hitbox(), 0.5),
     );
     world.material.insert(
         player,
@@ -102,9 +103,8 @@ async fn main() {
 
         // update world and camera
         physics::update_vel(&mut world);
-        physics::reset_rest(&mut world); // rest is updated in physics::simulate_collisions()
-        // let collisions = collision::detect_collisions(&mut world);
-        // collision::compute_collisions(&mut world, collisions);
+        physics::reset_rest(&mut world);
+        collisions::resolve_collisions(&mut world, true);
         physics::update_pos(&mut world);
 
         camera.update(world.transform.get(player).expect("missing transform").pos);
@@ -128,7 +128,7 @@ async fn main() {
             // String::from("----------------------------------------"),
         ]);
 
-        // std::thread::sleep(std::time::Duration::from_millis(500));
+        // std::thread::sleep(std::time::Duration::from_millis(300));
         prelude::next_frame().await;
     }
 }
