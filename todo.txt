@@ -16,7 +16,7 @@
 
 # rendering
 [x] render objects following layers
-[ ] implement Display for components
+[x] implement Display for components
 
 # project management
 [ ] add license

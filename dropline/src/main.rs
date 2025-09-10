@@ -1,8 +1,7 @@
 use lithium_engine::{
     debug,
     ecs::{
-        components::{self, ToHitBox},
-        entities,
+        components, entities,
         systems::{collisions, physics},
     },
     loader, mq_adapter, scene,
@@ -119,9 +118,24 @@ async fn main() {
         );
 
         debug::display(&[
-            format!("player_id: {:?}", player),
-            format!("player_transform: {:?}", world.transform.get(player)),
-            format!("player_rigid_body: {:?}", world.rigid_body.get(player)),
+            format!("player_id: {}", player),
+            format!(
+                "player_transform: {}",
+                world.transform.get(player).expect("missing transform")
+            ),
+            format!(
+                "player_rigid_body: {}",
+                world.rigid_body.get(player).expect("missing rigid_body")
+            ),
+            format!(
+                "player_surface: {}",
+                world.surface.get(player).expect("missing surface")
+            ),
+            format!("player_shape: {}", world.shape.get(player).expect("missing shape")),
+            format!(
+                "player_material: {}",
+                world.material.get(player).expect("missing material")
+            ),
             // String::from("----------------------------------------"),
         ]);
 

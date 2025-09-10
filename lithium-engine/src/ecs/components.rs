@@ -1,8 +1,7 @@
-use std::ops::Add;
+use crate::ecs::systems::physics::{EPS, pow2};
 
 use serde::Deserialize;
-
-use crate::ecs::systems::physics::{EPS, pow2};
+use std::fmt;
 
 #[derive(Copy, Clone, Deserialize, Debug)]
 pub struct Vec2 {
@@ -186,6 +185,12 @@ impl Vec2 {
     }
 }
 
+impl fmt::Display for Vec2 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({:.4} ; {:.4})", self.x, self.y)
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct Transform {
     pub spawn: Vec2,
@@ -202,6 +207,16 @@ impl Transform {
     #[inline]
     pub fn reset_pos(&mut self) {
         self.pos = self.spawn
+    }
+}
+
+impl fmt::Display for Transform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "transform (spawn: {}, pos: {}, angle: {})",
+            self.spawn, self.pos, self.angle
+        )
     }
 }
 
@@ -235,6 +250,12 @@ impl Angle {
     }
 }
 
+impl fmt::Display for Angle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:.4} rad", self.radians)
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct RigidBody {
     pub vel: Vec2,
@@ -260,6 +281,16 @@ impl RigidBody {
     }
 }
 
+impl fmt::Display for RigidBody {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "rigid_body (vel: {:.4}, acc: {:.4}), mass: {:.4}, rest: {}",
+            self.vel, self.acc, self.mass, self.rest
+        )
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct Surface {
     pub elast: f32,
@@ -269,6 +300,12 @@ impl Surface {
     #[inline]
     pub fn new(elast: f32) -> Self {
         Self { elast }
+    }
+}
+
+impl fmt::Display for Surface {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "surface (elast: {:.4})", self.elast)
     }
 }
 
@@ -286,6 +323,16 @@ impl Material {
     }
 }
 
+impl fmt::Display for Material {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "material (color: {}, layer: {}, show: {})",
+            self.color, self.layer, self.show
+        )
+    }
+}
+
 #[derive(Copy, Clone, Deserialize, Debug)]
 pub struct Color {
     pub r: u8,
@@ -298,6 +345,12 @@ impl Color {
     #[inline]
     pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
+    }
+}
+
+impl fmt::Display for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "rgba ({}, {}, {}, {})", self.r, self.g, self.b, self.a)
     }
 }
 
@@ -336,6 +389,16 @@ impl HitBox {
         self.min_y += pos.y;
         self.max_x += pos.x;
         self.max_y += pos.y;
+    }
+}
+
+impl fmt::Display for HitBox {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "hitbox ({:.4}, {:.4}, {:.4}, {:.4})",
+            self.min_x, self.min_y, self.max_x, self.max_y
+        )
     }
 }
 
@@ -386,6 +449,18 @@ impl ToHitBox for Shape {
             Shape::Rect(rect) => rect.hitbox(),
             Shape::Circle(circle) => circle.hitbox(),
             Shape::Polygon(polygon) => polygon.hitbox(),
+        }
+    }
+}
+
+impl fmt::Display for Shape {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Shape::Segment(segment) => write!(f, "{}", segment),
+            Shape::Triangle(triangle) => write!(f, "{}", triangle),
+            Shape::Rect(rect) => write!(f, "{}", rect),
+            Shape::Circle(circle) => write!(f, "{}", circle),
+            Shape::Polygon(polygon) => write!(f, "{}", polygon),
         }
     }
 }
@@ -455,6 +530,12 @@ impl ToHitBox for Segment {
         let max_y = self.a.y.max(self.b.y);
 
         HitBox::new(min_x, min_y, max_x, max_y)
+    }
+}
+
+impl fmt::Display for Segment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "segment ({:.4}, {:.4})", self.a, self.b)
     }
 }
 
@@ -595,6 +676,12 @@ impl ToHitBox for Triangle {
     }
 }
 
+impl fmt::Display for Triangle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "triangle ({:.4}, {:.4}, {:.4})", self.a, self.b, self.c)
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct Rect {
     pub width: f32,
@@ -623,6 +710,12 @@ impl ToHitBox for Rect {
     }
 }
 
+impl fmt::Display for Rect {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "rectangle ({:.4}, {:.4})", self.width, self.height)
+    }
+}
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct Circle {
     pub radius: f32,
@@ -644,6 +737,12 @@ impl ToHitBox for Circle {
     fn hitbox(&self) -> HitBox {
         let diameter = self.radius * 2.0;
         HitBox::new(0.0, 0.0, diameter, diameter)
+    }
+}
+
+impl fmt::Display for Circle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "circle ({:.4})", self.radius)
     }
 }
 
@@ -722,6 +821,19 @@ impl ToHitBox for Polygon {
         }
 
         HitBox::new(min_x, min_y, max_x, max_y)
+    }
+}
+
+impl fmt::Display for Polygon {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "polygon (")?;
+        for (i, vert) in self.verts.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", vert)?;
+        }
+        write!(f, ")")
     }
 }
 
