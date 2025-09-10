@@ -17,7 +17,7 @@ pub fn load_static_map(
         entities.push(entity);
 
         world.transform.insert(entity, obj.transform);
-        world.collider.insert(entity, obj.collider);
+        world.surface.insert(entity, obj.surface);
         world.shape.insert(entity, obj.shape);
         world.material.insert(entity, obj.material);
     }
@@ -40,7 +40,7 @@ pub fn load_dynamic_map(
 
         world.transform.insert(entity, obj.transform);
         world.rigid_body.insert(entity, obj.rigid_body);
-        world.collider.insert(entity, obj.collider);
+        world.surface.insert(entity, obj.surface);
         world.shape.insert(entity, obj.shape);
         world.material.insert(entity, obj.material);
     }

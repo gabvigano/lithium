@@ -40,7 +40,7 @@ async fn main() {
 
     // create player
     let player = entity_manager.create();
-    let player_spawn = components::Vec2::new(250.0, 400.0);
+    let player_spawn = components::Vec2::new(250.0, 300.0);
     world.transform.insert(
         player,
         components::Transform::new(player_spawn, player_spawn, components::Angle { radians: 0.0 }),
@@ -54,14 +54,11 @@ async fn main() {
             false,
         ),
     );
+    world.surface.insert(player, components::Surface::new(0.5));
     world.shape.insert(
         player,
         // components::Shape::Circle(components::Circle::new(10.0)),
         components::Shape::Rect(components::Rect::new(15.0, 15.0)),
-    );
-    world.collider.insert(
-        player,
-        components::Collider::new(world.shape.get(player).expect("missing shape").hitbox(), 0.5),
     );
     world.material.insert(
         player,
@@ -127,6 +124,24 @@ async fn main() {
             format!("player_rigid_body: {:?}", world.rigid_body.get(player)),
             // String::from("----------------------------------------"),
         ]);
+
+        // debug::render_vector(
+        //     world.transform.get(player).expect("missing transform").pos,
+        //     world.rigid_body.get(player).expect("missing rigid_body").vel,
+        //     Some(5.0),
+        //     &camera,
+        //     prelude::RED,
+        //     false,
+        // );
+
+        // debug::render_vector(
+        //     world.transform.get(2).expect("missing transform").pos,
+        //     world.rigid_body.get(2).expect("missing rigid_body").vel,
+        //     Some(5.0),
+        //     &camera,
+        //     prelude::RED,
+        //     false,
+        // );
 
         // std::thread::sleep(std::time::Duration::from_millis(300));
         prelude::next_frame().await;

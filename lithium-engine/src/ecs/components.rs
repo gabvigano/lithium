@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use serde::Deserialize;
 
 use crate::ecs::systems::physics::{EPS, pow2};
@@ -259,30 +261,16 @@ impl RigidBody {
 }
 
 #[derive(Clone, Deserialize, Debug)]
-pub struct Collider {
-    pub hitbox: HitBox,
-    pub corrupted: bool,
-    pub elast: Elast,
+pub struct Surface {
+    pub elast: f32,
 }
 
-impl Collider {
+impl Surface {
     #[inline]
-    pub fn new(hitbox: HitBox, elast: Elast) -> Self {
-        Self {
-            hitbox,
-            corrupted: true,
-            elast,
-        }
+    pub fn new(elast: f32) -> Self {
+        Self { elast }
     }
 }
-
-pub type HitBox = Rect;
-
-pub trait ToHitBox {
-    fn hitbox(&self) -> HitBox;
-}
-
-pub type Elast = f32;
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct Material {
@@ -310,6 +298,74 @@ impl Color {
     #[inline]
     pub fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
         Self { r, g, b, a }
+    }
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct HitBox {
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+}
+
+impl HitBox {
+    #[inline]
+    pub fn new(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
+        Self {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        }
+    }
+
+    #[inline]
+    pub fn add_pos(self, pos: Vec2) -> Self {
+        Self::new(
+            self.min_x + pos.x,
+            self.min_y + pos.y,
+            self.max_x + pos.x,
+            self.max_y + pos.y,
+        )
+    }
+
+    #[inline]
+    pub fn add_pos_inplace(&mut self, pos: Vec2) {
+        self.min_x += pos.x;
+        self.min_y += pos.y;
+        self.max_x += pos.x;
+        self.max_y += pos.y;
+    }
+}
+
+pub trait ToHitBox {
+    fn hitbox(&self) -> HitBox;
+}
+
+#[derive(Clone, Debug)]
+pub enum SweptShape<'a> {
+    Unmoved { shape: &'a Shape, pos: Vec2 },
+    AxisRect { swept: Rect, pos: Vec2 },
+    Moved { swept: Polygon },
+}
+
+impl ToHitBox for SweptShape<'_> {
+    fn hitbox(&self) -> HitBox {
+        match self {
+            SweptShape::Unmoved { shape, pos } => {
+                // this is a local position, global position must be added
+                shape.hitbox().add_pos(*pos)
+            }
+            SweptShape::AxisRect { swept, pos } => {
+                // this is a local position, global position must be added
+                swept.hitbox().add_pos(*pos)
+            }
+            SweptShape::Moved { swept } => {
+                // this is already a global position
+                swept.hitbox()
+            }
+        }
     }
 }
 
@@ -393,10 +449,12 @@ impl Segment {
 impl ToHitBox for Segment {
     #[inline]
     fn hitbox(&self) -> HitBox {
-        let delta_x = (self.b.x - self.a.x).abs().max(EPS);
-        let delta_y = (self.b.y - self.a.y).abs().max(EPS);
+        let min_x = self.a.x.min(self.b.x);
+        let min_y = self.a.y.min(self.b.y);
+        let max_x = self.a.x.max(self.b.x);
+        let max_y = self.a.y.max(self.b.y);
 
-        HitBox::new(delta_x, delta_y)
+        HitBox::new(min_x, min_y, max_x, max_y)
     }
 }
 
@@ -529,15 +587,11 @@ impl ToHitBox for Triangle {
     #[inline]
     fn hitbox(&self) -> HitBox {
         let min_x = self.a.x.min(self.b.x.min(self.c.x));
-        let max_x = self.a.x.max(self.b.x.max(self.c.x));
-
         let min_y = self.a.y.min(self.b.y.min(self.c.y));
+        let max_x = self.a.x.max(self.b.x.max(self.c.x));
         let max_y = self.a.y.max(self.b.y.max(self.c.y));
 
-        let delta_x = max_x - min_x;
-        let delta_y = max_y - min_y;
-
-        HitBox::new(delta_x, delta_y)
+        HitBox::new(min_x, min_y, max_x, max_y)
     }
 }
 
@@ -560,24 +614,12 @@ impl Rect {
 
         Self { width, height }
     }
-
-    pub fn top_right(&self) -> Vec2 {
-        Vec2::new(self.width, 0.0)
-    }
-
-    pub fn bottom_left(&self) -> Vec2 {
-        Vec2::new(0.0, self.height)
-    }
-
-    pub fn bottom_right(&self) -> Vec2 {
-        Vec2::new(self.width, self.height)
-    }
 }
 
 impl ToHitBox for Rect {
     #[inline]
     fn hitbox(&self) -> HitBox {
-        self.clone()
+        HitBox::new(0.0, 0.0, self.width, self.height)
     }
 }
 
@@ -600,7 +642,8 @@ impl Circle {
 impl ToHitBox for Circle {
     #[inline]
     fn hitbox(&self) -> HitBox {
-        HitBox::new(self.radius * 2.0, self.radius * 2.0)
+        let diameter = self.radius * 2.0;
+        HitBox::new(0.0, 0.0, diameter, diameter)
     }
 }
 
@@ -666,30 +709,19 @@ impl ToHitBox for Polygon {
     fn hitbox(&self) -> HitBox {
         // initialize extremes
         let mut min_x = f32::MAX;
-        let mut max_x = f32::MIN;
         let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
         let mut max_y = f32::MIN;
 
         // update extremes
-        for v in &self.verts {
-            if v.x < min_x {
-                min_x = v.x;
-            }
-            if v.x > max_x {
-                max_x = v.x;
-            }
-            if v.y < min_y {
-                min_y = v.y;
-            }
-            if v.y > max_y {
-                max_y = v.y;
-            }
+        for vert in &self.verts {
+            min_x = min_x.min(vert.x);
+            min_y = min_y.min(vert.y);
+            max_x = max_x.max(vert.x);
+            max_y = max_y.max(vert.y);
         }
 
-        let delta_x = max_x - min_x;
-        let delta_y = max_y - min_y;
-
-        HitBox::new(delta_x, delta_y)
+        HitBox::new(min_x, min_y, max_x, max_y)
     }
 }
 
@@ -742,7 +774,7 @@ impl Force {
 #[derive(Deserialize)]
 pub struct Static {
     pub transform: Transform,
-    pub collider: Collider,
+    pub surface: Surface,
     pub shape: Shape,
     pub material: Material,
 }
@@ -751,7 +783,7 @@ pub struct Static {
 pub struct Dynamic {
     pub transform: Transform,
     pub rigid_body: RigidBody,
-    pub collider: Collider,
+    pub surface: Surface,
     pub shape: Shape,
     pub material: Material,
 }

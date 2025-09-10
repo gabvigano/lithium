@@ -7,215 +7,206 @@ use crate::{
     world::World,
 };
 
-/// checks if 2 rectangles are colliding
-fn check_rect_rect(
-    pos_1: components::Vec2,
-    shape_1: components::Rect,
-    pos_2: components::Vec2,
-    shape_2: components::Rect,
-) -> bool {
-    // extract data about rectangles
-    let components::Rect {
-        width: width_1,
-        height: height_1,
-    } = shape_1;
-    let components::Rect {
-        width: width_2,
-        height: height_2,
-    } = shape_2;
-
-    let (left_1, right_1) = (pos_1.x, pos_1.x + width_1);
-    let (top_1, bottom_1) = (pos_1.y, pos_1.y + height_1);
-
-    let (left_2, right_2) = (pos_2.x, pos_2.x + width_2);
-    let (top_2, bottom_2) = (pos_2.y, pos_2.y + height_2);
-
-    // check aabb with EPS to avoid false negatives (since positives will be checked via SAT algorithm)
-    !(left_1 > right_2 + EPS || left_2 > right_1 + EPS || top_1 > bottom_2 + EPS || top_2 > bottom_1 + EPS)
-
-    // compute overlaps (rect_1 point of view) since they are colliding
-    // let left_overlap = right_2 - left_1;
-    // let right_overlap = right_1 - left_2;
-    // let top_overlap = bottom_2 - top_1;
-    // let bottom_overlap = bottom_1 - top_2;
-
-    // if left_overlap.min(right_overlap) < top_overlap.min(bottom_overlap) {
-    //     if right_overlap <= left_overlap {
-    //         Some(components::Angle::new(0.0))
-    //     } else {
-    //         Some(components::Angle::new(std::f32::consts::PI))
-    //     }
-    // } else {
-    //     if top_overlap <= bottom_overlap {
-    //         Some(components::Angle::new(std::f32::consts::FRAC_PI_2))
-    //     } else {
-    //         Some(components::Angle::new(3.0 * std::f32::consts::FRAC_PI_2))
-    //     }
-    // }
+/// checks if 2 hitboxes are colliding using EPS to prevent false negatives
+fn check_hitboxes(hitbox_1: &components::HitBox, hitbox_2: &components::HitBox) -> bool {
+    !(hitbox_1.min_x > hitbox_2.max_x + EPS
+        || hitbox_2.min_x > hitbox_1.max_x + EPS
+        || hitbox_1.min_y > hitbox_2.max_y + EPS
+        || hitbox_2.min_y > hitbox_1.max_y + EPS)
 }
 
-/// checks if 2 circles are colliding
-// pub fn check_circle_circle(
-//     pos_1: components::Vec2,
-//     shape_1: components::Circle,
-//     pos_2: components::Vec2,
-//     shape_2: components::Circle,
-// ) -> bool {
-//     // extract data about circles
-//     let radius_1 = shape_1.radius;
-//     let radius_2 = shape_2.radius;
-
-//     let delta_x = (pos_2.x + radius_2) - (pos_1.x + radius_1); // difference between centres x
-//     let delta_y = (pos_2.y + radius_2) - (pos_1.y + radius_1); // difference between centres y
-
-//     let radius_sum = radius_1 + radius_2;
-
-//     // check square distance and square radius with EPS to avoid false negatives (since positives will be checked via SAT algorithm)
-//     delta_x * delta_x + delta_y * delta_y >= (radius_sum + EPS) * (radius_sum + EPS)
-// }
-
-/// checks if a circle and a rectangle are colliding and returns the collision angle
-// pub fn check_circle_rect() {}
-
-/// checks if 2 objects are colliding using SAT algorithm, returns the mtv
-/// for shapes with local vertices you need to pass them as global, while for shapes with just sizes (circles, rects) you don't need to
+/// checks if 2 objects are colliding using SAT algorithm, returns the mtv_axis
 fn check_sat(
-    pos_1: components::Vec2,
-    shape_1: &components::Shape,
-    pos_2: components::Vec2,
-    shape_2: &components::Shape,
+    swept_shape_1: &components::SweptShape,
+    swept_shape_2: &components::SweptShape,
 ) -> Option<components::Vec2> {
-    fn add_axes(shape: &components::Shape, axes: &mut Vec<components::Vec2>) {
-        match shape {
-            components::Shape::Segment(segment) => {
-                let edge = segment.b.sub(segment.a);
+    fn add_axes(swept_shape: &components::SweptShape, axes: &mut Vec<components::Vec2>) {
+        fn add_polygon_axes(polygon: &components::Polygon, axes: &mut Vec<components::Vec2>) {
+            let len = polygon.verts.len();
+
+            for i in 0..len {
+                let edge = polygon.verts[(i + 1) % len].sub(polygon.verts[i]);
                 if edge.square_mag() > EPS_SQR {
-                    axes.push(edge.perp().norm())
+                    axes.push(edge.perp().norm());
                 }
             }
-            components::Shape::Triangle(triangle) => {
-                let edges = [
-                    triangle.b.sub(triangle.a),
-                    triangle.c.sub(triangle.b),
-                    triangle.a.sub(triangle.c),
-                ];
-                for edge in edges {
+        }
+
+        match swept_shape {
+            components::SweptShape::Unmoved { shape, pos: _ } => match shape {
+                components::Shape::Segment(segment) => {
+                    let edge = segment.b.sub(segment.a);
                     if edge.square_mag() > EPS_SQR {
-                        axes.push(edge.perp().norm());
+                        axes.push(edge.perp().norm())
                     }
                 }
-            }
-            components::Shape::Rect(_) => {
+
+                components::Shape::Triangle(triangle) => {
+                    let edges = [
+                        triangle.b.sub(triangle.a),
+                        triangle.c.sub(triangle.b),
+                        triangle.a.sub(triangle.c),
+                    ];
+                    for edge in edges {
+                        if edge.square_mag() > EPS_SQR {
+                            axes.push(edge.perp().norm());
+                        }
+                    }
+                }
+                components::Shape::Rect(_) => {
+                    axes.push(components::Vec2::new(1.0, 0.0)); // add horizontal
+                    axes.push(components::Vec2::new(0.0, 1.0)); // add vertical
+                }
+                components::Shape::Circle(_) => unimplemented!(),
+                components::Shape::Polygon(polygon) => add_polygon_axes(polygon, axes),
+            },
+            components::SweptShape::AxisRect { swept: _, pos: _ } => {
                 axes.push(components::Vec2::new(1.0, 0.0)); // add horizontal
                 axes.push(components::Vec2::new(0.0, 1.0)); // add vertical
             }
-            components::Shape::Circle(circle) => unimplemented!(),
-            components::Shape::Polygon(polygon) => {
-                let len = polygon.verts.len();
+            components::SweptShape::Moved { swept } => add_polygon_axes(swept, axes),
+        }
+    }
 
-                for i in 0..len {
-                    let edge = polygon.verts[(i + 1) % len].sub(polygon.verts[i]);
-                    if edge.square_mag() > EPS_SQR {
-                        axes.push(edge.perp().norm());
+    fn project_shape(swept_shape: &components::SweptShape, axis: components::Vec2) -> (f32, f32) {
+        fn project_rect(rect: &components::Rect, pos: components::Vec2, axis: components::Vec2) -> (f32, f32) {
+            let a_proj = pos.dot(axis);
+            let b_proj = pos.add_scalar(rect.width, 0.0).dot(axis);
+            let c_proj = pos.add_scalar(0.0, rect.height).dot(axis);
+            let d_proj = pos.add_scalar(rect.width, rect.height).dot(axis);
+
+            (
+                a_proj.min(b_proj.min(c_proj.min(d_proj))),
+                a_proj.max(b_proj.max(c_proj.max(d_proj))),
+            )
+        }
+
+        match swept_shape {
+            components::SweptShape::Unmoved { shape, pos } => {
+                // unmoved shapes have local positions
+
+                match shape {
+                    components::Shape::Segment(segment) => {
+                        let a_proj = pos.add(segment.a).dot(axis);
+                        let b_proj = pos.add(segment.b).dot(axis);
+
+                        (a_proj.min(b_proj), a_proj.max(b_proj))
+                    }
+                    components::Shape::Triangle(triangle) => {
+                        let a_proj = pos.add(triangle.a).dot(axis);
+                        let b_proj = pos.add(triangle.b).dot(axis);
+                        let c_proj = pos.add(triangle.c).dot(axis);
+
+                        (a_proj.min(b_proj.min(c_proj)), a_proj.max(b_proj.max(c_proj)))
+                    }
+                    components::Shape::Rect(rect) => project_rect(rect, *pos, axis),
+                    components::Shape::Circle(_) => unimplemented!(),
+                    components::Shape::Polygon(polygon) => {
+                        let mut min = f32::INFINITY;
+                        let mut max = f32::NEG_INFINITY;
+
+                        for vert in &polygon.verts {
+                            let proj = pos.add(*vert).dot(axis);
+                            min = min.min(proj);
+                            max = max.max(proj);
+                        }
+                        (min, max)
                     }
                 }
             }
+            components::SweptShape::AxisRect { swept, pos } => project_rect(swept, *pos, axis), // axis-rect has local positions
+            components::SweptShape::Moved { swept } => {
+                // moved polygon has global positions
+
+                let mut min = f32::INFINITY;
+                let mut max = f32::NEG_INFINITY;
+
+                for vert in &swept.verts {
+                    let proj = vert.dot(axis); // I am not reusing this code because here we don't sum position, so it is simpler like this
+                    if proj < min {
+                        min = proj;
+                    }
+                    if proj > max {
+                        max = proj;
+                    }
+                }
+                (min, max)
+            }
         }
     }
 
-    fn project_shape(pos: components::Vec2, shape: &components::Shape, axis: components::Vec2) -> (f32, f32) {
-        fn project_verts(verts: &[components::Vec2], axis: components::Vec2) -> (f32, f32) {
-            let mut min = f32::INFINITY;
-            let mut max = f32::NEG_INFINITY;
-
-            for v in verts {
-                let p = v.dot(axis);
-                if p < min {
-                    min = p;
-                }
-                if p > max {
-                    max = p;
-                }
-            }
-            (min, max)
-        }
-
-        match shape {
-            components::Shape::Segment(segment) => {
-                // for segment, vertices are already global
-
-                let a_proj = segment.a.dot(axis);
-                let b_proj = segment.b.dot(axis);
-
-                if a_proj <= b_proj {
-                    (a_proj, b_proj)
-                } else {
-                    (b_proj, a_proj)
-                }
-            }
-            components::Shape::Triangle(triangle) => project_verts(&[triangle.a, triangle.b, triangle.c], axis), // for triangle, vertices are already global
-            components::Shape::Rect(rect) => project_verts(
-                // for rectangle, we have to add the global position
-                &[
-                    pos,
-                    pos.add_scalar(rect.width, 0.0),
-                    pos.add_scalar(0.0, rect.height),
-                    pos.add_scalar(rect.width, rect.height),
-                ],
-                axis,
-            ),
-            components::Shape::Circle(circle) => unimplemented!(),
-            components::Shape::Polygon(polygon) => project_verts(&polygon.verts, axis),
-        }
-    }
-
-    fn remove_duplicates(axes: &[components::Vec2]) -> Vec<components::Vec2> {
-        let mut unique = Vec::new();
+    #[inline]
+    fn remove_duplicate_axes(axes: &[components::Vec2]) -> Vec<components::Vec2> {
+        let mut unique: Vec<components::Vec2> = Vec::with_capacity(axes.len());
         for &axis in axes {
-            if !unique
-                .iter()
-                .any(|other_axis: &components::Vec2| other_axis.equal(axis))
-            {
-                unique.push(axis);
+            for &u in &unique {
+                if axis.dot(u).abs() >= 1.0 - EPS {
+                    // axis are normalized
+                    continue;
+                }
             }
+            unique.push(axis);
         }
         unique
     }
 
-    fn centroid(pos: components::Vec2, shape: &components::Shape) -> components::Vec2 {
-        match shape {
-            components::Shape::Segment(segment) => segment.a.add(segment.b).scale(0.5),
-            components::Shape::Triangle(triangle) => triangle.a.add(triangle.b.add(triangle.c)).scale(1.0 / 3.0),
-            components::Shape::Rect(rect) => pos.add(components::Vec2::new(rect.width / 2.0, rect.height / 2.0)), // for rectangle, we have to add the global position
-            components::Shape::Circle(circle) => unimplemented!(),
-            components::Shape::Polygon(polygon) => {
-                let mut sum = components::Vec2::new(0.0, 0.0);
-                for v in &polygon.verts {
-                    sum.add_inplace(*v);
+    fn centroid(swept_shape: &components::SweptShape) -> components::Vec2 {
+        match swept_shape {
+            components::SweptShape::Unmoved { shape, pos } => {
+                // unmoved shapes have local positions
+
+                match shape {
+                    components::Shape::Segment(segment) => pos.add(segment.a.add(segment.b).scale(0.5)),
+                    components::Shape::Triangle(triangle) => {
+                        pos.add(triangle.a.add(triangle.b.add(triangle.c)).scale(1.0 / 3.0))
+                    }
+                    components::Shape::Rect(rect) => {
+                        pos.add(components::Vec2::new(rect.width / 2.0, rect.height / 2.0))
+                    }
+                    components::Shape::Circle(_) => unimplemented!(),
+                    components::Shape::Polygon(polygon) => {
+                        let mut sum = components::Vec2::new(0.0, 0.0);
+                        for vert in &polygon.verts {
+                            sum.add_inplace(*vert);
+                        }
+                        pos.add(sum.scale(1.0 / polygon.verts.len() as f32))
+                    }
                 }
-                sum.scale(1.0 / polygon.verts.len() as f32)
+            }
+            components::SweptShape::AxisRect { swept, pos } => {
+                // axis-rect has local positions
+                pos.add(components::Vec2::new(swept.width / 2.0, swept.height / 2.0))
+            }
+            components::SweptShape::Moved { swept } => {
+                // moved polygon has global positions
+
+                let mut sum = components::Vec2::new(0.0, 0.0);
+                for vert in &swept.verts {
+                    sum.add_inplace(*vert);
+                }
+                sum.scale(1.0 / swept.verts.len() as f32)
             }
         }
     }
 
-    // vector of axes, not normalized for performance
+    // vector of axes
     let mut axes: Vec<components::Vec2> = Vec::new();
-    add_axes(shape_1, &mut axes);
-    add_axes(shape_2, &mut axes);
-    let axes = remove_duplicates(&axes); // remove duplicates to avoid more axis checks
+    add_axes(swept_shape_1, &mut axes);
+    add_axes(swept_shape_2, &mut axes);
+    let axes = remove_duplicate_axes(&axes); // remove duplicates to avoid more axis checks
 
-    // compute centroids for the 2 shapes
-    let centroid_1 = centroid(pos_1, shape_1);
-    let centroid_2 = centroid(pos_2, shape_2);
-    let delta = centroid_2.sub(centroid_1); // point from shape_1 to shape_2
+    // compute centroids for the 2 swept_shapes
+    let centroid_1 = centroid(swept_shape_1);
+    let centroid_2 = centroid(swept_shape_2);
+    let delta = centroid_2.sub(centroid_1); // point from swept_shape_1 to swept_shape_2
 
     // initialize mtv data
     let mut min_overlap = f32::INFINITY;
-    let mut mtv_axis = components::Vec2::new(0.0, 0.0); // minimum translation vector, smallest vector to push one shape out of the other
+    let mut mtv_axis = components::Vec2::new(0.0, 0.0); // minimum translation vector axis, the axis of the smallest vector to push one shape out of the other
 
     for axis in axes {
-        let (min_1, max_1) = project_shape(pos_1, shape_1, axis);
-        let (min_2, max_2) = project_shape(pos_2, shape_2, axis);
+        let (min_1, max_1) = project_shape(swept_shape_1, axis);
+        let (min_2, max_2) = project_shape(swept_shape_2, axis);
 
         if min_1 > max_2 + EPS || min_2 > max_1 + EPS {
             // not colliding
@@ -224,29 +215,27 @@ fn check_sat(
 
         let overlap = (max_1.min(max_2)) - (min_1.max(min_2));
         if overlap < min_overlap {
-            // update the mtv
+            // update the mtv data
             min_overlap = overlap;
-            mtv_axis = if delta.dot(axis) < 0.0 { axis.neg() } else { axis };
+            mtv_axis = if delta.dot(axis) < 0.0 { axis.neg() } else { axis }; // invert the mtv_axis direction if it is not from swept_shape_1 to swept_shape_2
         }
     }
 
-    Some(mtv_axis) //.scale(min_overlap))
+    Some(mtv_axis)
 }
 
 /// checks if 2 objects are colliding and returns the mtv
 /// it prechecks using hitboxes and if the hitboxes are colliding it switches to SAT algorithm
 fn check_collision(
-    pos_1: components::Vec2,
-    shape_1: &components::Shape,
-    pos_2: components::Vec2,
-    shape_2: &components::Shape,
+    swept_shape_1: &components::SweptShape,
+    swept_shape_2: &components::SweptShape,
 ) -> Option<components::Vec2> {
-    let hitbox_1 = shape_1.hitbox();
-    let hitbox_2 = shape_2.hitbox();
+    let hitbox_1 = swept_shape_1.hitbox();
+    let hitbox_2 = swept_shape_2.hitbox();
 
-    if check_rect_rect(pos_1, hitbox_1, pos_2, hitbox_2) {
+    if check_hitboxes(&hitbox_1, &hitbox_2) {
         // hitbox are colliding, check collision using SAT
-        return check_sat(pos_1, shape_1, pos_2, shape_2);
+        return check_sat(swept_shape_1, swept_shape_2);
     }
     None
 }
@@ -294,18 +283,22 @@ pub fn convex_hull(mut verts: Vec<components::Vec2>) -> Option<components::Polyg
     Some(components::Polygon::new(bottom_boundary))
 }
 
-/// generates a swept shape for a moving shape
-/// if the shape is not moving, the input shape is returned
-/// notice how the shape returned are in global positions
+/// generates a swept shape from a moving shape
 fn generate_swept_shape(
     pos_1: components::Vec2,
     pos_2: components::Vec2,
     shape: &components::Shape,
-) -> components::Shape {
-    if pos_1.square_dist(pos_2) > EPS_SQR {
-        match &shape {
+) -> components::SweptShape<'_> {
+    if pos_1.square_dist(pos_2) <= EPS_SQR {
+        // the object is not moving
+        components::SweptShape::Unmoved {
+            shape: shape,
+            pos: pos_1,
+        }
+    } else {
+        // the object is moving
+        match shape {
             components::Shape::Segment(segment) => {
-                // compute vertices
                 let mut verts = Vec::with_capacity(4);
 
                 verts.push(pos_1.add(segment.a));
@@ -313,10 +306,11 @@ fn generate_swept_shape(
                 verts.push(pos_2.add(segment.a));
                 verts.push(pos_2.add(segment.b));
 
-                components::Shape::Polygon(convex_hull(verts).unwrap()) // None is impossible since we are passing 4 verts
+                components::SweptShape::Moved {
+                    swept: convex_hull(verts).unwrap(),
+                }
             }
             components::Shape::Triangle(triangle) => {
-                // compute vertices
                 let mut verts = Vec::with_capacity(6);
 
                 verts.push(pos_1.add(triangle.a));
@@ -326,27 +320,49 @@ fn generate_swept_shape(
                 verts.push(pos_2.add(triangle.b));
                 verts.push(pos_2.add(triangle.c));
 
-                components::Shape::Polygon(convex_hull(verts).unwrap()) // None is impossible since we are passing 6 verts
+                components::SweptShape::Moved {
+                    swept: convex_hull(verts).unwrap(),
+                }
             }
             components::Shape::Rect(rect) => {
-                // compute vertices
-                let mut verts = Vec::with_capacity(8);
+                // check for axis optimization
+                if (pos_1.x - pos_2.x).abs() <= EPS {
+                    // vertical-only movement
+                    let min_y = pos_1.y.min(pos_2.y);
+                    let delta_y = (pos_1.y - pos_2.y).abs();
 
-                verts.push(pos_1);
-                verts.push(pos_1.add(components::Vec2::new(rect.width, 0.0)));
-                verts.push(pos_1.add(components::Vec2::new(0.0, rect.height)));
-                verts.push(pos_1.add(components::Vec2::new(rect.width, rect.height)));
-                verts.push(pos_2);
-                verts.push(pos_2.add_scalar(rect.width, 0.0));
-                verts.push(pos_2.add_scalar(0.0, rect.height));
-                verts.push(pos_2.add_scalar(rect.width, rect.height));
+                    components::SweptShape::AxisRect {
+                        swept: components::Rect::new(rect.width, delta_y + rect.height),
+                        pos: components::Vec2::new(pos_1.x, min_y),
+                    }
+                } else if (pos_1.y - pos_2.y).abs() <= EPS {
+                    // horizontal-only movement
+                    let min_x = pos_1.x.min(pos_2.x);
+                    let delta_x = (pos_1.x - pos_2.x).abs();
 
-                components::Shape::Polygon(convex_hull(verts).unwrap()) // None is impossible since we are passing 4/8 verts
+                    components::SweptShape::AxisRect {
+                        swept: components::Rect::new(delta_x + rect.width, rect.height),
+                        pos: components::Vec2::new(min_x, pos_1.y),
+                    }
+                } else {
+                    let mut verts = Vec::with_capacity(8);
+
+                    verts.push(pos_1);
+                    verts.push(pos_1.add(components::Vec2::new(rect.width, 0.0)));
+                    verts.push(pos_1.add(components::Vec2::new(0.0, rect.height)));
+                    verts.push(pos_1.add(components::Vec2::new(rect.width, rect.height)));
+                    verts.push(pos_2);
+                    verts.push(pos_2.add_scalar(rect.width, 0.0));
+                    verts.push(pos_2.add_scalar(0.0, rect.height));
+                    verts.push(pos_2.add_scalar(rect.width, rect.height));
+
+                    components::SweptShape::Moved {
+                        swept: convex_hull(verts).unwrap(),
+                    }
+                }
             }
-
-            components::Shape::Circle(circle) => unimplemented!(),
+            components::Shape::Circle(_) => unimplemented!(),
             components::Shape::Polygon(polygon) => {
-                // compute vertices
                 let mut verts = Vec::with_capacity(polygon.verts.len() * 2);
 
                 for &v in &polygon.verts {
@@ -354,29 +370,31 @@ fn generate_swept_shape(
                     verts.push(pos_2.add(v));
                 }
 
-                components::Shape::Polygon(convex_hull(verts).unwrap()) // None is impossible since we are passing more than 6 verts
+                components::SweptShape::Moved {
+                    swept: convex_hull(verts).unwrap(),
+                }
             }
         }
-    } else {
-        // since it is not moving, just return a shape clone
-        shape.clone()
     }
 }
 
-const REST_X_EPS: f32 = 2.0;
-
 /// updates 2 entities' velocity vector after they collide
-fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: entities::Entity, mtv: components::Vec2) {
+fn compute_reaction(
+    world: &mut World,
+    entity_1: entities::Entity,
+    entity_2: entities::Entity,
+    mtv_axis: components::Vec2,
+) {
     // update rest
-    if mtv.x.abs() <= REST_X_EPS {
+    if mtv_axis.x.abs() <= 2.0 {
         // one is above the other
-        if mtv.y > 0.0
+        if mtv_axis.y > 0.0
             && let Some(rigid_body) = world.rigid_body.get_mut(entity_1)
         {
             rigid_body.rest = true;
         }
 
-        if mtv.y < 0.0
+        if mtv_axis.y < 0.0
             && let Some(rigid_body) = world.rigid_body.get_mut(entity_2)
         {
             rigid_body.rest = true;
@@ -384,13 +402,13 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
     }
 
     let elast = {
-        let elast_1 = world.collider.get(entity_1).expect("missing collider").elast;
-        let elast_2 = world.collider.get(entity_2).expect("missing collider").elast;
+        let elast_1 = world.surface.get(entity_1).expect("missing surface").elast;
+        let elast_2 = world.surface.get(entity_2).expect("missing surface").elast;
         elast_1.min(elast_2)
     };
 
     let (vel_1, inv_mass_1) = {
-        let rigid_body = world.rigid_body.get(entity_1).expect("missing rigid body");
+        let rigid_body = world.rigid_body.get(entity_1).expect("missing rigid_body");
         if rigid_body.mass <= 0.0 {
             panic!("mass must be positive")
         };
@@ -408,17 +426,71 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
         }
     };
 
-    let rel_vel = vel_2.sub(vel_1).dot(mtv); // relative velocity from shape_1 to shape_2
+    // relative velocity from shape_1 to shape_2
+    // it is basically the vector from vel_1 to vel_2 projected on the mtv_axis
+    // remember that mtv_axis is the unit vector perpendicular to the edge with minimum overlap
+    let rel_vel = vel_2.sub(vel_1).dot(mtv_axis);
 
     if rel_vel >= -EPS {
         // object are not getting closer
         return;
     };
 
+    // so here are the steps to compute impulse:
+    //
+    // 1) first of all we want to prove that after the impulse, we have:
+    // vel_1' = vel_1 - J / mass_1    and    vel_2' = vel_2 + J / mass_2
+    // where J is impulse
+    //
+    // since J = F * t, by Newton's third law we have opposite impulses on the 2 bodies:
+    // -J_1 = J_2 = J
+    //
+    // and since impulse is the change in momentum, we have that:
+    // P' = P + J
+    // where P is the momentum
+    //
+    // so replacing into this formula we get:
+    // P_1' = P_1 - J    and P_2' = P + J
+    //
+    // and if we divide by the mass we get:
+    // vel_1' = vel_1 - J / mass_1    and    vel_2' = vel_2 + J / mass_2
+    //
+    // which is exactly what we were looking for
+    //
+    // 2) elast is definied as:
+    // vel_rel' = -elast * vel_rel
+    //
+    // 3) the relative velocity is:
+    // vel_rel = vel_2 - vel_1
+    //
+    // so the new relative velocity is:
+    // vel_rel' = vel_2' - vel_1'
+    //
+    // 4) replacing, we have:
+    // vel_rel' = (vel_2 + J / mass_2) - (vel_1 - J / mass_1)
+    // vel_rel' = vel_2 - vel_1 + J / mass_2 + J / mass_1
+    // vel_rel' = vel_rel + J * (1 / mass_2 + 1 / mass_1)
+    // -elast * vel_rel = vel_rel + J * (1 / mass_2 + 1 / mass_1)
+    // -elast * vel_rel - vel_rel = J * (1 / mass_2 + 1 / mass_1)
+    // vel_rel * (-elast - 1) = J * (1 / mass_2 + 1 / mass_1)
+    // -vel_rel * (elast + 1) = J * (1 / mass_2 + 1 / mass_1)
+    // J = -vel_rel * (elast + 1) / (1 / mass_2 + 1 / mass_1)
+    //
+    // and rearranging:
+    // J = -((1 + elast) * rel_vel / (inv_mass_1 + inv_mass_2))
     let impulse = -((1.0 + elast) * rel_vel / (inv_mass_1 + inv_mass_2));
 
+    // what we will do with impulse is simply this:
+    // since:
+    // delta_P = delta_vel * mass = J
+    //
+    // we get:
+    // delta_vel_n = J_n / mass_n
+    //
+    // so that is the magnitude of delta_vel, the direction is simply the mtv_axis direction
+
     let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid body");
-    rigid_body_1.vel.sub_inplace(mtv.scale(impulse * inv_mass_1));
+    rigid_body_1.vel.sub_inplace(mtv_axis.scale(impulse * inv_mass_1)); // here we subtract the delta_vel (see above why)
 
     // round velocity to 0 for object 1
     if rigid_body_1.vel.x.abs() <= 0.6 {
@@ -429,7 +501,7 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
     }
 
     if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
-        rigid_body_2.vel.add_inplace(mtv.scale(impulse * inv_mass_2));
+        rigid_body_2.vel.add_inplace(mtv_axis.scale(impulse * inv_mass_2)); // here we add the delta_vel (see above why)
 
         // round velocity to 0 for object 2
         if rigid_body_2.vel.x.abs() <= 0.6 {
@@ -444,22 +516,14 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
 /// recursively resolves all collisions for a given object
 fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &Vec<entities::Entity>) {
     // checks the presence and extracts the position, velocity and shape of entity_1
-    let (
-        Some(&components::Transform { pos: pos_1, .. }),
-        Some(&components::RigidBody { vel: vel_1, .. }),
-        Some(shape_1),
-    ) = (
+    let (Some(&components::Transform { pos: pos_1, .. }), Some(&components::RigidBody { vel: vel_1, .. }), Some(_)) = (
         world.transform.get(entity_1),
         world.rigid_body.get(entity_1),
         world.shape.get(entity_1),
-    )
-    else {
+    ) else {
         // entity is not a dynamic object
         return;
     };
-
-    // generate swept_shape and hitbox for shape_1
-    let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1);
 
     for &entity_2 in ents {
         // avoid checking collision with self
@@ -477,20 +541,29 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
         // check if entity_2 is dynamic or static and extract its velocity
         let vel_2 = world.rigid_body.get(entity_2).map(|rb| rb.vel);
 
-        let swept_shape_2 = if vel_2.is_none() {
-            // it is static, generate fixed swept_shape since we still need the vertices to be updated to global position
-            generate_swept_shape(pos_2, pos_2, shape_2)
-        } else {
-            // it is dynamic, generate swept_shape
-            generate_swept_shape(pos_2, pos_2.add(vel_2.unwrap()), shape_2)
+        let mtv_axis = {
+            // generate swept_shapes
+            let shape_1 = world.shape.get(entity_1).unwrap();
+            let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1);
+
+            let swept_shape_2 = if vel_2.is_none() {
+                // it is static, generate fixed swept_shape since we still need the vertices to be updated to global position
+                generate_swept_shape(pos_2, pos_2, shape_2)
+            } else {
+                // it is dynamic, generate swept_shape
+                generate_swept_shape(pos_2, pos_2.add(vel_2.unwrap()), shape_2)
+            };
+
+            // check collision
+            check_collision(&swept_shape_1, &swept_shape_2)
         };
 
-        // check collision
-        if let Some(mtv) = check_collision(pos_1, &swept_shape_1, pos_2, &swept_shape_2) {
-            compute_reaction(world, entity_1, entity_2, mtv);
+        if let Some(mtv_axis) = mtv_axis {
+            // they are colliding
+            compute_reaction(world, entity_1, entity_2, mtv_axis);
 
-            // resolve_obj_collisions(world, entity_1, &ents);
-            // resolve_obj_collisions(world, entity_2, &ents);
+            resolve_obj_collisions(world, entity_1, &ents);
+            resolve_obj_collisions(world, entity_2, &ents);
         }
     }
 }

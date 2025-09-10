@@ -11,19 +11,25 @@ pub fn display(msgs: &[String]) {
 }
 
 pub fn render_vector(
-    start_pos: components::Vec2,
-    vec_x: f32,
-    vec_y: f32,
+    mut start_pos: components::Vec2,
+    mut vec: components::Vec2,
+    scale: Option<f32>,
     camera: &scene::Camera,
     color: prelude::Color,
     compose: bool,
 ) {
-    let (start_x, start_y) = (start_pos.x - camera.pos().x, start_pos.y - camera.pos().y);
+    start_pos.sub_inplace(camera.pos());
+
+    if let Some(scale_value) = scale {
+        vec.scale_inplace(scale_value);
+    }
+
+    vec.add_inplace(start_pos);
 
     if compose {
-        prelude::draw_line(start_x, start_y, start_x + vec_x, start_y + vec_y, 3.0, color);
+        prelude::draw_line(start_pos.x, start_pos.y, vec.x, vec.y, 3.0, color);
     } else {
-        prelude::draw_line(start_x, start_y, start_x + vec_x, start_y, 3.0, color);
-        prelude::draw_line(start_x, start_y, start_x, start_y + vec_y, 3.0, color);
+        prelude::draw_line(start_pos.x, start_pos.y, vec.x, start_pos.y, 3.0, color);
+        prelude::draw_line(start_pos.x, start_pos.y, start_pos.x, vec.y, 3.0, color);
     }
 }
