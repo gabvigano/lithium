@@ -39,7 +39,7 @@ async fn main() {
 
     // create player
     let player = entity_manager.create();
-    let player_spawn = components::Vec2::new(250.0, 300.0);
+    let player_spawn = components::Vec2::new(150.0, 100.0);
     world.transform.insert(
         player,
         components::Transform::new(player_spawn, player_spawn, components::Angle { radians: 0.0 }),

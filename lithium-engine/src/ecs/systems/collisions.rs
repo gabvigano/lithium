@@ -27,7 +27,7 @@ fn check_sat(
             for i in 0..len {
                 let edge = polygon.verts[(i + 1) % len].sub(polygon.verts[i]);
                 if edge.square_mag() > EPS_SQR {
-                    axes.push(edge.perp().norm());
+                    axes.push(edge.perp_ccw().norm());
                 }
             }
         }
@@ -37,7 +37,7 @@ fn check_sat(
                 components::Shape::Segment(segment) => {
                     let edge = segment.b.sub(segment.a);
                     if edge.square_mag() > EPS_SQR {
-                        axes.push(edge.perp().norm())
+                        axes.push(edge.perp_ccw().norm())
                     }
                 }
 
@@ -49,7 +49,7 @@ fn check_sat(
                     ];
                     for edge in edges {
                         if edge.square_mag() > EPS_SQR {
-                            axes.push(edge.perp().norm());
+                            axes.push(edge.perp_ccw().norm());
                         }
                     }
                 }
@@ -167,7 +167,7 @@ fn check_sat(
                     components::Shape::Polygon(polygon) => {
                         let mut sum = components::Vec2::new(0.0, 0.0);
                         for vert in &polygon.verts {
-                            sum.add_inplace(*vert);
+                            sum.add_mut(*vert);
                         }
                         pos.add(sum.scale(1.0 / polygon.verts.len() as f32))
                     }
@@ -182,7 +182,7 @@ fn check_sat(
 
                 let mut sum = components::Vec2::new(0.0, 0.0);
                 for vert in &swept.verts {
-                    sum.add_inplace(*vert);
+                    sum.add_mut(*vert);
                 }
                 sum.scale(1.0 / swept.verts.len() as f32)
             }
@@ -431,8 +431,9 @@ fn compute_reaction(
     // remember that mtv_axis is the unit vector perpendicular to the edge with minimum overlap
     let rel_vel = vel_2.sub(vel_1).dot(mtv_axis);
 
-    if rel_vel >= -EPS {
+    if rel_vel >= EPS {
         // object are not getting closer
+        // careful here, since objects resting on other objects have a negative rel_vel very close to 0
         return;
     };
 
@@ -490,7 +491,7 @@ fn compute_reaction(
     // so that is the magnitude of delta_vel, the direction is simply the mtv_axis direction
 
     let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid body");
-    rigid_body_1.vel.sub_inplace(mtv_axis.scale(impulse * inv_mass_1)); // here we subtract the delta_vel (see above why)
+    rigid_body_1.vel.sub_mut(mtv_axis.scale(impulse * inv_mass_1)); // here we subtract the delta_vel (see above why)
 
     // round velocity to 0 for object 1
     if rigid_body_1.vel.x.abs() <= 0.6 {
@@ -501,7 +502,7 @@ fn compute_reaction(
     }
 
     if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
-        rigid_body_2.vel.add_inplace(mtv_axis.scale(impulse * inv_mass_2)); // here we add the delta_vel (see above why)
+        rigid_body_2.vel.add_mut(mtv_axis.scale(impulse * inv_mass_2)); // here we add the delta_vel (see above why)
 
         // round velocity to 0 for object 2
         if rigid_body_2.vel.x.abs() <= 0.6 {
@@ -547,7 +548,7 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1);
 
             let swept_shape_2 = if vel_2.is_none() {
-                // it is static, generate fixed swept_shape since we still need the vertices to be updated to global position
+                // it is static, generate fixed swept_shape
                 generate_swept_shape(pos_2, pos_2, shape_2)
             } else {
                 // it is dynamic, generate swept_shape

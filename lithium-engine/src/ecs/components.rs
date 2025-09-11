@@ -26,7 +26,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn add_inplace(&mut self, vec2: Self) {
+    pub fn add_mut(&mut self, vec2: Self) {
         self.x += vec2.x;
         self.y += vec2.y;
     }
@@ -37,7 +37,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn add_scalar_inplace(&mut self, x: f32, y: f32) {
+    pub fn add_scalar_mut(&mut self, x: f32, y: f32) {
         self.x += x;
         self.y += y;
     }
@@ -48,7 +48,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn sub_inplace(&mut self, vec2: Self) {
+    pub fn sub_mut(&mut self, vec2: Self) {
         self.x -= vec2.x;
         self.y -= vec2.y;
     }
@@ -59,7 +59,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn sub_scalar_inplace(&mut self, x: f32, y: f32) {
+    pub fn sub_scalar_mut(&mut self, x: f32, y: f32) {
         self.x -= x;
         self.y -= y;
     }
@@ -70,7 +70,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn mul_inplace(&mut self, vec2: Self) {
+    pub fn mul_mut(&mut self, vec2: Self) {
         self.x *= vec2.x;
         self.y *= vec2.y;
     }
@@ -81,7 +81,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn div_inplace(&mut self, vec2: Self) {
+    pub fn div_mut(&mut self, vec2: Self) {
         self.x /= vec2.x;
         self.y /= vec2.y;
     }
@@ -92,7 +92,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn scale_inplace(&mut self, scalar: f32) {
+    pub fn scale_mut(&mut self, scalar: f32) {
         self.x *= scalar;
         self.y *= scalar;
     }
@@ -104,7 +104,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn norm_inplace(&mut self) {
+    pub fn norm_mut(&mut self) {
         let mag = self.mag();
         self.x /= mag;
         self.y /= mag;
@@ -116,7 +116,7 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn neg_inplace(&mut self) {
+    pub fn neg_mut(&mut self) {
         self.x = -self.x;
         self.y = -self.y;
     }
@@ -127,18 +127,30 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn abs_inplace(&mut self) {
+    pub fn abs_mut(&mut self) {
         self.x = self.x.abs();
         self.y = self.y.abs();
     }
 
     #[inline]
-    pub fn perp(self) -> Self {
+    pub fn perp_cw(self) -> Self {
+        Self::new(self.y, -self.x)
+    }
+
+    #[inline]
+    pub fn perp_cw_mut(&mut self) {
+        let x = self.x;
+        self.x = self.y;
+        self.y = -x;
+    }
+
+    #[inline]
+    pub fn perp_ccw(self) -> Self {
         Self::new(-self.y, self.x)
     }
 
     #[inline]
-    pub fn perp_inplace(&mut self) {
+    pub fn perp_ccw_mut(&mut self) {
         let x = self.x;
         self.x = -self.y;
         self.y = x;
@@ -384,7 +396,7 @@ impl HitBox {
     }
 
     #[inline]
-    pub fn add_pos_inplace(&mut self, pos: Vec2) {
+    pub fn add_pos_mut(&mut self, pos: Vec2) {
         self.min_x += pos.x;
         self.min_y += pos.y;
         self.max_x += pos.x;

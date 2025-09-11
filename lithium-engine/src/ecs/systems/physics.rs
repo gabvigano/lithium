@@ -57,7 +57,7 @@ pub fn reset_acc(world: &mut World, new_acc: components::Vec2) {
 pub fn update_pos(world: &mut World) {
     for (entity, transform) in world.transform.iter_mut() {
         if let Some(components::RigidBody { vel, .. }) = world.rigid_body.get(entity) {
-            transform.pos.add_inplace(*vel);
+            transform.pos.add_mut(*vel);
         }
     }
 }
@@ -65,7 +65,7 @@ pub fn update_pos(world: &mut World) {
 #[inline]
 pub fn update_vel(world: &mut World) {
     for (_, rigid_body) in world.rigid_body.iter_mut() {
-        rigid_body.vel.add_inplace(rigid_body.acc);
+        rigid_body.vel.add_mut(rigid_body.acc);
     }
 }
 
@@ -83,7 +83,7 @@ pub fn apply_vel(
                 .get_mut(entity)
                 .expect("missing rigid_body")
                 .vel
-                .add_scalar_inplace(clamp_toward_zero(new_vel, limit), 0.0);
+                .add_scalar_mut(clamp_toward_zero(new_vel, limit), 0.0);
         }
         components::Axis::Vertical => {
             world
@@ -91,7 +91,7 @@ pub fn apply_vel(
                 .get_mut(entity)
                 .expect("missing rigid_body")
                 .vel
-                .add_scalar_inplace(0.0, clamp_toward_zero(new_vel, limit));
+                .add_scalar_mut(0.0, clamp_toward_zero(new_vel, limit));
         }
     }
 }

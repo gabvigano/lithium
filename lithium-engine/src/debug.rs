@@ -18,13 +18,13 @@ pub fn render_vector(
     color: prelude::Color,
     compose: bool,
 ) {
-    start_pos.sub_inplace(camera.pos());
+    start_pos.sub_mut(camera.pos());
 
     if let Some(scale_value) = scale {
-        vec.scale_inplace(scale_value);
+        vec.scale_mut(scale_value);
     }
 
-    vec.add_inplace(start_pos);
+    vec.add_mut(start_pos);
 
     if compose {
         prelude::draw_line(start_pos.x, start_pos.y, vec.x, vec.y, 3.0, color);
