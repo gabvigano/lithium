@@ -25,12 +25,12 @@ Keep in mind the project is **work in progress**, so things may change quickly.
 
 ### 🚀 Getting started
 
-1. Clone the repository:
+1. clone the repository:
    ```bash
    git clone https://github.com/gabvigano/lithium.git
    cd lithium
    ```
-2. Run the demo game to make sure everything works:
+2. run the demo game to make sure everything works:
    ```bash
    cd dropline
    cargo run
@@ -40,9 +40,9 @@ Keep in mind the project is **work in progress**, so things may change quickly.
 
 ### ✍️ Code style
 
-- Format with `cargo fmt` before committing.
-- Lint with `cargo clippy` and fix warnings when possible.
-- Keep commits small and messages clear. Use the following syntax:
+- format with `cargo fmt` before committing
+- lint with `cargo clippy` and fix warnings when possible
+- keep commits small and messages **clear**. Use the following syntax:
    ```txt
    add collision detection and rendering to polygons:
 
@@ -50,36 +50,42 @@ Keep in mind the project is **work in progress**, so things may change quickly.
    - fix hitbox overlap issue
    - add rendering of polygons
    ```
-- Use only **english** for everything.
-- Write commits and comments in **lowercase**.
+- use only **english** for everything
+- write commits and comments in **lowercase**
 
 ---
 
 ### 🌱 Workflow
 
-1. Create a new branch:
+1. create a new branch:
    ```bash
    git checkout -b feature/my-feature
    ```
-2. Make your changes and commit them:
+2. make your changes and commit them:
    ```bash
    git commit -m "commit message"
    ```
-3. Push to your fork and open a Pull Request against `main`.
+3. push to your fork and open a Pull Request against `main`.
 
 ---
 
-### 💡 What you can contribute
+### 💡 Ways to contribute
 
-- 🐞 Bug fixes
-- ⚡ Engine features (ECS, physics, rendering)
-- 🔥 New features (listed in [todo.txt](./todo.txt))
-- 🎮 Demo game improvements
-- 📚 Documentation & examples
+- 🐞 fix bugs
+- ⚡ improve performance
+- 🛠️ add engine features (ecs, physics, rendering, ...)
+- 🔥 suggest new features by adding them to [todo.txt](./todo.txt)
+- 🏗️ claim and implement features from [todo.txt](./todo.txt), including your own suggestions
+- 📚 improve documentation & examples
+
+please ensure:
+- follow coding style (see above)
+- update docs where relevant
+- open a pull request with a clear description
 
 ---
 
 ### 📜 License
 
 By contributing, you agree that your code will be licensed under the same terms as this repository.
-See [LICENSE](./LICENSE) for details.
+See [LICENSE](./LICENSE.md) for details.

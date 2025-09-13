@@ -32,7 +32,7 @@ This repository contains:
 
 ### 🚀 Installation and execution
 
-Clone the repository, cd into dropline and run the example game:
+Clone the repository, cd into dropline and run it:
 
 ```bash
 git clone https://github.com/gabvigano/lithium.git
