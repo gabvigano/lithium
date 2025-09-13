@@ -7,10 +7,10 @@
 # collisions
 [x] rebuild the collisions algorithm
 [x] make the collisions algorithm work (recursion goes in stackoverflow)
-> there are currently 2 bugs that cause the collisions algorithm to crash due stackoverflow:
+> there are currently different bugs that cause the collisions algorithm to crash due stackoverflow:
 [x]     - when a dynamic object rests on top of another dynamic object
-[ ]     - when a dynamic object slides over a static object and reaches its edge while moving at a relatively slow speed; I actually believe there is an issue with collisions on vertices
-[ ]     - when a dynamic object falls on top of another dynamic object too quickly
+[ ]     - when a dynamic object slides over a static or dynamic object and reaches its edge while moving at a relatively slow speed; I actually believe there is an issue with collisions on vertices
+[ ]     - when 2 dynamic objects hit each other too quickly (seems like vel > 40)
 [ ]     - when 2 dynamic objects fall on top of another dynamic object (?)
 [ ] implement collision support for all shapes
 [ ] make a more detail path-tracer (by only adding velocities, some information reguarding the path are lost, we should update position as well)
@@ -24,7 +24,9 @@
 [x] implement Display for components
 
 # project management
-[ ] add license
+[x] add README.md
+[x] add CONTRIBUTING.md
+[x] add LICENSE.md
 
 # collisions
 [ ] stabilize collision detector (hardcode values to counteract approximations)

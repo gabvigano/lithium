@@ -490,7 +490,7 @@ fn compute_reaction(
     //
     // so that is the magnitude of delta_vel, the direction is simply the mtv_axis direction
 
-    let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid body");
+    let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid_body");
     rigid_body_1.vel.sub_mut(mtv_axis.scale(impulse * inv_mass_1)); // here we subtract the delta_vel (see above why)
 
     // round velocity to 0 for object 1

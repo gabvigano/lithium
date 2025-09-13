@@ -141,7 +141,7 @@ async fn main() {
 
         // debug::render_vector(
         //     world.transform.get(player).expect("missing transform").pos,
-        //     world.rigid_body.get(player).expect("missing rigid_body").vel,
+        //     world.rigid_body.get(player).expect("missing_rigid_body").vel,
         //     Some(5.0),
         //     &camera,
         //     prelude::RED,
@@ -150,7 +150,7 @@ async fn main() {
 
         // debug::render_vector(
         //     world.transform.get(2).expect("missing transform").pos,
-        //     world.rigid_body.get(2).expect("missing rigid_body").vel,
+        //     world.rigid_body.get(2).expect("missing_rigid_body").vel,
         //     Some(5.0),
         //     &camera,
         //     prelude::RED,
