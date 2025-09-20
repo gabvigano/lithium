@@ -557,8 +557,8 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             // they are colliding
             compute_reaction(world, entity_1, entity_2, mtv_axis);
 
-            resolve_obj_collisions(world, entity_1, &ents);
-            resolve_obj_collisions(world, entity_2, &ents);
+            // resolve_obj_collisions(world, entity_1, &ents);
+            // resolve_obj_collisions(world, entity_2, &ents);
         }
     }
 }
@@ -596,7 +596,9 @@ pub fn resolve_collisions(world: &mut World, sort: bool) {
         world.transform.get_ents()
     };
 
-    for &entity in ents.iter() {
-        resolve_obj_collisions(world, entity, &ents);
+    for _ in 0..5 {
+        for &entity in ents.iter() {
+            resolve_obj_collisions(world, entity, &ents);
+        }
     }
 }
