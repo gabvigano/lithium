@@ -274,6 +274,13 @@ impl fmt::Display for Angle {
     }
 }
 
+#[derive(Deserialize)]
+pub struct RigidBodySpec {
+    pub vel: Vec2,
+    pub force: Vec2,
+    pub mass: f32,
+}
+
 #[derive(Clone, Debug)]
 pub struct RigidBody {
     pub vel: Vec2,
@@ -281,13 +288,6 @@ pub struct RigidBody {
     mass: f32,
     inv_mass: f32,
     pub rest: bool,
-}
-
-#[derive(Deserialize)]
-pub struct RigidBodySpec {
-    pub vel: Vec2,
-    pub force: Vec2,
-    pub mass: f32,
 }
 
 impl RigidBody {
