@@ -203,7 +203,13 @@ impl fmt::Display for Vec2 {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Deserialize)]
+pub struct TransformSpec {
+    pub spawn: Vec2,
+    pub angle: Angle,
+}
+
+#[derive(Clone, Debug)]
 pub struct Transform {
     pub spawn: Vec2,
     pub pos: Vec2,
@@ -232,7 +238,13 @@ impl fmt::Display for Transform {
     }
 }
 
-#[derive(Copy, Clone, Deserialize, Debug)]
+impl From<TransformSpec> for Transform {
+    fn from(spec: TransformSpec) -> Self {
+        Self::new(spec.spawn, spec.spawn, spec.angle)
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
 pub enum Axis {
     Horizontal,
     Vertical,
@@ -262,18 +274,36 @@ impl fmt::Display for Angle {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Debug)]
 pub struct RigidBody {
     pub vel: Vec2,
-    pub acc: Vec2,
-    pub mass: f32,
+    pub force: Vec2,
+    mass: f32,
+    inv_mass: f32,
     pub rest: bool,
+}
+
+#[derive(Deserialize)]
+pub struct RigidBodySpec {
+    pub vel: Vec2,
+    pub force: Vec2,
+    pub mass: f32,
 }
 
 impl RigidBody {
     #[inline]
-    pub fn new(vel: Vec2, acc: Vec2, mass: f32, rest: bool) -> Self {
-        Self { vel, acc, mass, rest }
+    pub fn new(vel: Vec2, force: Vec2, mass: f32, rest: bool) -> Self {
+        if mass <= 0.0 {
+            panic!("mass must be positive");
+        }
+
+        Self {
+            vel,
+            force,
+            mass,
+            inv_mass: 1.0 / mass,
+            rest,
+        }
     }
 
     #[inline]
@@ -282,8 +312,20 @@ impl RigidBody {
     }
 
     #[inline]
-    pub fn reset_acc(&mut self, new_acc: Vec2) {
-        self.acc = new_acc;
+    pub fn reset_force(&mut self, new_force: Vec2) {
+        self.force = new_force;
+    }
+
+    pub fn mass(&self) -> f32 {
+        self.mass
+    }
+    pub fn inv_mass(&self) -> f32 {
+        self.inv_mass
+    }
+
+    pub fn set_mass(&mut self, mass: f32) {
+        self.mass = mass;
+        self.inv_mass = 1.0 / mass;
     }
 }
 
@@ -291,13 +333,24 @@ impl fmt::Display for RigidBody {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "rigid_body (vel: {:.4}, acc: {:.4}), mass: {:.4}, rest: {}",
-            self.vel, self.acc, self.mass, self.rest
+            "rigid_body (vel: {:.4}, force: {:.4}), mass: {:.4}, rest: {}",
+            self.vel, self.force, self.mass, self.rest
         )
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+impl From<RigidBodySpec> for RigidBody {
+    fn from(spec: RigidBodySpec) -> Self {
+        Self::new(spec.vel, spec.force, spec.mass, false)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct SurfaceSpec {
+    pub elast: f32,
+}
+
+#[derive(Clone, Debug)]
 pub struct Surface {
     pub elast: f32,
 }
@@ -315,7 +368,20 @@ impl fmt::Display for Surface {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+impl From<SurfaceSpec> for Surface {
+    fn from(spec: SurfaceSpec) -> Self {
+        Self::new(spec.elast)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct MaterialSpec {
+    pub color: Color,
+    pub layer: usize,
+    pub show: bool,
+}
+
+#[derive(Clone, Debug)]
 pub struct Material {
     pub color: Color,
     pub layer: usize,
@@ -336,6 +402,12 @@ impl fmt::Display for Material {
             "material (color: {}, layer: {}, show: {})",
             self.color, self.layer, self.show
         )
+    }
+}
+
+impl From<MaterialSpec> for Material {
+    fn from(spec: MaterialSpec) -> Self {
+        Self::new(spec.color, spec.layer, spec.show)
     }
 }
 
@@ -360,7 +432,7 @@ impl fmt::Display for Color {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Debug)]
 pub struct HitBox {
     pub min_x: f32,
     pub min_y: f32,
@@ -877,18 +949,18 @@ impl Line {
 // OBJECTS
 
 #[derive(Deserialize)]
-pub struct Static {
-    pub transform: Transform,
-    pub surface: Surface,
+pub struct StaticSpec {
+    pub transform: TransformSpec,
+    pub surface: SurfaceSpec,
     pub shape: Shape,
-    pub material: Material,
+    pub material: MaterialSpec,
 }
 
 #[derive(Deserialize)]
-pub struct Dynamic {
-    pub transform: Transform,
-    pub rigid_body: RigidBody,
-    pub surface: Surface,
+pub struct DynamicSpec {
+    pub transform: TransformSpec,
+    pub rigid_body: RigidBodySpec,
+    pub surface: SurfaceSpec,
     pub shape: Shape,
-    pub material: Material,
+    pub material: MaterialSpec,
 }

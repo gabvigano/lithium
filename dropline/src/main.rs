@@ -75,8 +75,8 @@ async fn main() {
         // empty frame
         prelude::clear_background(prelude::BLACK);
 
-        // reset accelleration
-        physics::reset_acc(&mut world, GRAVITY);
+        // reset force
+        physics::reset_force(&mut world, GRAVITY);
 
         // handle user inputs
         if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).expect("missing rigid_body").rest {
@@ -91,7 +91,7 @@ async fn main() {
         if prelude::is_key_down(prelude::KeyCode::R) {
             physics::reset_pos(&mut world);
             physics::reset_vel(&mut world, components::Vec2::new(0.0, 0.0));
-            physics::reset_acc(&mut world, components::Vec2::new(0.0, 0.0));
+            physics::reset_force(&mut world, components::Vec2::new(0.0, 0.0));
         }
         if prelude::is_key_down(prelude::KeyCode::P) {
             panic!("user panicked")

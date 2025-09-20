@@ -409,18 +409,12 @@ fn compute_reaction(
 
     let (vel_1, inv_mass_1) = {
         let rigid_body = world.rigid_body.get(entity_1).expect("missing rigid_body");
-        if rigid_body.mass <= 0.0 {
-            panic!("mass must be positive")
-        };
-        (rigid_body.vel, 1.0 / rigid_body.mass)
+        (rigid_body.vel, rigid_body.inv_mass())
     };
 
     let (vel_2, inv_mass_2) = {
         if let Some(rigid_body) = world.rigid_body.get(entity_2) {
-            if rigid_body.mass <= 0.0 {
-                panic!("mass must be positive")
-            };
-            (rigid_body.vel, 1.0 / rigid_body.mass)
+            (rigid_body.vel, rigid_body.inv_mass())
         } else {
             (components::Vec2::new(0.0, 0.0), 0.0)
         }

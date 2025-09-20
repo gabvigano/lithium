@@ -47,9 +47,9 @@ pub fn reset_vel(world: &mut World, new_vel: components::Vec2) {
 }
 
 #[inline]
-pub fn reset_acc(world: &mut World, new_acc: components::Vec2) {
+pub fn reset_force(world: &mut World, new_force: components::Vec2) {
     for (_, rigid_body) in world.rigid_body.iter_mut() {
-        rigid_body.reset_acc(new_acc);
+        rigid_body.reset_force(new_force.scale(rigid_body.mass()));
     }
 }
 
@@ -65,7 +65,7 @@ pub fn update_pos(world: &mut World) {
 #[inline]
 pub fn update_vel(world: &mut World) {
     for (_, rigid_body) in world.rigid_body.iter_mut() {
-        rigid_body.vel.add_mut(rigid_body.acc);
+        rigid_body.vel.add_mut(rigid_body.force.scale(rigid_body.inv_mass()));
     }
 }
 
@@ -106,10 +106,10 @@ pub fn apply_axis_force(
 
     match axis {
         components::Axis::Horizontal => {
-            rigid_body.acc.x = clamp_toward_zero(rigid_body.acc.x + new_force / rigid_body.mass, limit);
+            rigid_body.force.x = clamp_toward_zero(rigid_body.force.x + new_force, limit);
         }
         components::Axis::Vertical => {
-            rigid_body.acc.y = clamp_toward_zero(rigid_body.acc.y + new_force / rigid_body.mass, limit);
+            rigid_body.force.y = clamp_toward_zero(rigid_body.force.y + new_force, limit);
         }
     }
 }
@@ -117,5 +117,5 @@ pub fn apply_axis_force(
 pub fn apply_force(world: &mut World, entity: entities::Entity, new_force: components::Vec2) {
     let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
 
-    rigid_body.acc.add_mut(new_force.scale(1.0 / rigid_body.mass));
+    rigid_body.force.add_mut(new_force);
 }

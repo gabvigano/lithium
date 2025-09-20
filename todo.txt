@@ -46,3 +46,6 @@
 
 # physics
 [ ] more realistic physics with friction
+
+# system update
+[ ] review API and security: make components private when necessary
