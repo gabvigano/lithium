@@ -69,48 +69,53 @@ pub fn update_vel(world: &mut World) {
     }
 }
 
-pub fn apply_vel(
+pub fn apply_axis_vel(
     world: &mut World,
     entity: entities::Entity,
     new_vel: f32,
     limit: Option<f32>,
     axis: components::Axis,
 ) {
+    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
+
     match axis {
         components::Axis::Horizontal => {
-            world
-                .rigid_body
-                .get_mut(entity)
-                .expect("missing rigid_body")
-                .vel
-                .add_scalar_mut(clamp_toward_zero(new_vel, limit), 0.0);
+            rigid_body.vel.x = clamp_toward_zero(rigid_body.vel.x + new_vel, limit);
         }
         components::Axis::Vertical => {
-            world
-                .rigid_body
-                .get_mut(entity)
-                .expect("missing rigid_body")
-                .vel
-                .add_scalar_mut(0.0, clamp_toward_zero(new_vel, limit));
+            rigid_body.vel.y = clamp_toward_zero(rigid_body.vel.y + new_vel, limit);
         }
     }
 }
 
-pub fn apply_force(world: &mut World, entity: entities::Entity, new_force: components::Force) {
+pub fn apply_vel(world: &mut World, entity: entities::Entity, new_vel: components::Vec2, limit: Option<f32>) {
     let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
 
-    match new_force.dir {
-        components::Dir::Angle(components::Angle { radians }) => {
-            rigid_body.acc.x += new_force.mag * radians.cos() / rigid_body.mass;
-            rigid_body.acc.y += new_force.mag * radians.sin() / rigid_body.mass;
+    rigid_body.vel.x = clamp_toward_zero(rigid_body.vel.x + new_vel.x, limit);
+    rigid_body.vel.y = clamp_toward_zero(rigid_body.vel.y + new_vel.y, limit);
+}
+
+pub fn apply_axis_force(
+    world: &mut World,
+    entity: entities::Entity,
+    new_force: f32,
+    limit: Option<f32>,
+    axis: components::Axis,
+) {
+    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
+
+    match axis {
+        components::Axis::Horizontal => {
+            rigid_body.acc.x = clamp_toward_zero(rigid_body.acc.x + new_force / rigid_body.mass, limit);
         }
-        components::Dir::Axis(axis) => match axis {
-            components::Axis::Horizontal => {
-                rigid_body.acc.x += new_force.mag / rigid_body.mass;
-            }
-            components::Axis::Vertical => {
-                rigid_body.acc.y += new_force.mag / rigid_body.mass;
-            }
-        },
+        components::Axis::Vertical => {
+            rigid_body.acc.y = clamp_toward_zero(rigid_body.acc.y + new_force / rigid_body.mass, limit);
+        }
     }
+}
+
+pub fn apply_force(world: &mut World, entity: entities::Entity, new_force: components::Vec2) {
+    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
+
+    rigid_body.acc.add_mut(new_force.scale(1.0 / rigid_body.mass));
 }

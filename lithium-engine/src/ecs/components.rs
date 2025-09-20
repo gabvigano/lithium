@@ -232,12 +232,6 @@ impl fmt::Display for Transform {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
-pub enum Dir {
-    Axis(Axis),
-    Angle(Angle),
-}
-
 #[derive(Copy, Clone, Deserialize, Debug)]
 pub enum Axis {
     Horizontal,
@@ -877,19 +871,6 @@ impl Line {
             m: m.expect("m is None"),
             q: q.expect("q is None"),
         }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Force {
-    pub mag: f32,
-    pub dir: Dir,
-}
-
-impl Force {
-    #[inline]
-    pub fn new(mag: f32, dir: Dir) -> Self {
-        Self { mag, dir }
     }
 }
 

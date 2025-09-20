@@ -80,13 +80,13 @@ async fn main() {
 
         // handle user inputs
         if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).expect("missing rigid_body").rest {
-            physics::apply_vel(&mut world, player, -12.0, Some(-12.0), components::Axis::Vertical);
+            physics::apply_axis_vel(&mut world, player, -12.0, Some(-12.0), components::Axis::Vertical);
         }
         if prelude::is_key_down(prelude::KeyCode::D) {
-            physics::apply_vel(&mut world, player, 1.0, Some(7.0), components::Axis::Horizontal);
+            physics::apply_axis_vel(&mut world, player, 1.0, Some(7.0), components::Axis::Horizontal);
         }
         if prelude::is_key_down(prelude::KeyCode::A) {
-            physics::apply_vel(&mut world, player, -1.0, Some(-7.0), components::Axis::Horizontal);
+            physics::apply_axis_vel(&mut world, player, -1.0, Some(-7.0), components::Axis::Horizontal);
         }
         if prelude::is_key_down(prelude::KeyCode::R) {
             physics::reset_pos(&mut world);

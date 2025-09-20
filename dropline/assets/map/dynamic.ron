@@ -1,102 +1,50 @@
 [
     (
         transform: (
-            spawn: (x: 100.0, y: 250.0),
-            pos: (x: 100.0, y: 250.0),
+            spawn: (x: 1200.0, y: -100.0),
+            pos: (x: 1200.0, y: -100.0),
             angle: (radians: 0.0),
         ),
         rigid_body: (
             vel: (x: 0.0, y: 0.0),
             acc: (x: 0.0, y: 0.0),
-            mass: 2.5,
+            mass: 5.0,
             rest: false,
         ),
-        surface: (
-            elast: 0.5,
-        ),
-        shape: Rect((
-            width: 100.0,
-            height: 100.0
-        )),
-        material: (
-            color: (r: 255, g: 0, b: 255, a: 255),
-            layer: 2,
-            show: true,
-        ),
+        surface: (elast: 0.5),
+        shape: Rect((width: 75.0, height: 75.0)),
+        material: (color: (r: 255, g: 0, b: 255, a: 255), layer: 2, show: true),
     ),
-    // (
-    //     transform: (
-    //         spawn: (x: 130.0, y: 0.0),
-    //         pos: (x: 130.0, y: 0.0),
-    //         angle: (radians: 0.0),
-    //     ),
-    //     rigid_body: (
-    //         vel: (x: 0.0, y: 0.0),
-    //         acc: (x: 0.0, y: 0.0),
-    //         mass: 1.0,
-    //         rest: false,
-    //     ),
-    //     surface: (
-    //         elast: 0.65,
-    //     ),
-    //     shape: Rect((
-    //         width: 15.0,
-    //         height: 15.0
-    //     )),
-    //     material: (
-    //         color: (r: 255, g: 255, b: 0, a: 255),
-    //         layer: 2,
-    //         show: true,
-    //     ),
-    // ),
-    // (
-    //     transform: (
-    //         spawn: (x: 150.0, y: 0.0),
-    //         pos: (x: 150.0, y: 0.0),
-    //         angle: (radians: 0.0),
-    //     ),
-    //     rigid_body: (
-    //         vel: (x: 0.0, y: 0.0),
-    //         acc: (x: 0.0, y: 0.0),
-    //         mass: 0.5,
-    //         rest: false,
-    //     ),
-    //     surface: (
-    //         elast: 0.75,
-    //     ),
-    //     shape: Rect((
-    //         width: 15.0,
-    //         height: 15.0
-    //     )),
-    //     material: (
-    //         color: (r: 255, g: 0, b: 0, a: 255),
-    //         layer: 2,
-    //         show: true,
-    //     ),
-    // ),
-    // (
-    //     transform: (
-    //         spawn: (x: 300.0, y: 0.0),
-    //         pos: (x: 300.0, y: 0.0),
-    //         angle: (radians: 0.0),
-    //     ),
-    //     rigid_body: (
-    //         vel: (x: 0.0, y: 0.0),
-    //         acc: (x: 0.0, y: 0.0),
-    //         mass: 2.5,
-    //         rest: false,
-    //     ),
-    //     surface: (
-    //         elast: 0.85,
-    //     ),
-    //     shape: Rect((
-    //         width: 15.0,
-    //         height: 15.0
-    //     )),
-    //     material: (
-    //         color: (r: 0, g: 0, b: 255, a: 255),
-    //         layer: 2,
-    //         show: true,
-    //     ),
-    // ),
+    (
+        transform: (
+            spawn: (x: 200.0, y: 0.0),
+            pos: (x: 200.0, y: 0.0),
+            angle: (radians: 0.0),
+        ),
+        rigid_body: (
+            vel: (x: 0.0, y: 0.0),
+            acc: (x: 0.0, y: 0.0),
+            mass: 0.5,
+            rest: false,
+        ),
+        surface: (elast: 0.65),
+        shape: Rect((width: 15.0, height: 15.0)),
+        material: (color: (r: 255, g: 255, b: 0, a: 255), layer: 2, show: true),
+    ),
+    (
+        transform: (
+            spawn: (x: 300.0, y: 0.0),
+            pos: (x: 300.0, y: 0.0),
+            angle: (radians: 0.0),
+        ),
+        rigid_body: (
+            vel: (x: 0.0, y: 0.0),
+            acc: (x: 0.0, y: 0.0),
+            mass: 0.75,
+            rest: false,
+        ),
+        surface: (elast: 0.5),
+        shape: Rect((width: 15.0, height: 15.0)),
+        material: (color: (r: 0, g: 255, b: 255, a: 255), layer: 2, show: true),
+    ),
 ]
