@@ -53,7 +53,7 @@ async fn main() {
             false,
         ),
     );
-    world.surface.insert(player, components::Surface::new(0.5));
+    world.surface.insert(player, components::Surface::new(0.5, 0.2, 0.15));
     world.shape.insert(
         player,
         // components::Shape::Circle(components::Circle::new(10.0)),
@@ -81,12 +81,20 @@ async fn main() {
         // handle user inputs
         if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).expect("missing rigid_body").rest {
             physics::apply_axis_vel(&mut world, player, -12.0, Some(-12.0), components::Axis::Vertical);
+            // physics::apply_axis_force(&mut world, player, -5.0, None, components::Axis::Vertical);
         }
-        if prelude::is_key_down(prelude::KeyCode::D) {
-            physics::apply_axis_vel(&mut world, player, 1.0, Some(7.0), components::Axis::Horizontal);
+        // let vel_x = world.rigid_body.get(player).expect("missing rigid_body").vel.x;
+        if prelude::is_key_down(prelude::KeyCode::D)
+        /*&& vel_x < 7.0*/
+        {
+            physics::apply_axis_vel(&mut world, player, 1.0, Some(10.0), components::Axis::Horizontal);
+            // physics::apply_axis_force(&mut world, player, 2.0, None, components::Axis::Horizontal);
         }
-        if prelude::is_key_down(prelude::KeyCode::A) {
-            physics::apply_axis_vel(&mut world, player, -1.0, Some(-7.0), components::Axis::Horizontal);
+        if prelude::is_key_down(prelude::KeyCode::A)
+        /*&& vel_x > -7.0*/
+        {
+            physics::apply_axis_vel(&mut world, player, -1.0, Some(-10.0), components::Axis::Horizontal);
+            // physics::apply_axis_force(&mut world, player, -2.0, None, components::Axis::Horizontal);
         }
         if prelude::is_key_down(prelude::KeyCode::R) {
             physics::reset_pos(&mut world);
@@ -111,9 +119,9 @@ async fn main() {
         // render text
         prelude::draw_text(
             &format!("FPS: {}", prelude::get_fps()),
-            prelude::screen_width() - 100.0,
+            prelude::screen_width() - 70.0,
             25.0,
-            25.0,
+            16.0,
             prelude::WHITE,
         );
 

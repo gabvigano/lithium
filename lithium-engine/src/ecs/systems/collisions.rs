@@ -15,7 +15,7 @@ fn check_hitboxes(hitbox_1: &components::HitBox, hitbox_2: &components::HitBox) 
         || hitbox_2.min_y > hitbox_1.max_y + EPS)
 }
 
-/// checks if 2 objects are colliding using SAT algorithm, returns the mtv_axis
+/// checks if 2 objects are colliding using SAT algorithm, returns the contact normal
 fn check_sat(
     swept_shape_1: &components::SweptShape,
     swept_shape_2: &components::SweptShape,
@@ -200,9 +200,9 @@ fn check_sat(
     let centroid_2 = centroid(swept_shape_2);
     let delta = centroid_2.sub(centroid_1); // point from swept_shape_1 to swept_shape_2
 
-    // initialize mtv data
+    // initialize normal data
     let mut min_overlap = f32::INFINITY;
-    let mut mtv_axis = components::Vec2::new(0.0, 0.0); // minimum translation vector axis, the axis of the smallest vector to push one shape out of the other
+    let mut normal = components::Vec2::new(0.0, 0.0); // minimum translation vector axis, the axis of the smallest vector to push one shape out of the other
 
     for axis in axes {
         let (min_1, max_1) = project_shape(swept_shape_1, axis);
@@ -215,16 +215,16 @@ fn check_sat(
 
         let overlap = (max_1.min(max_2)) - (min_1.max(min_2));
         if overlap < min_overlap {
-            // update the mtv data
+            // update the normal data
             min_overlap = overlap;
-            mtv_axis = if delta.dot(axis) < 0.0 { axis.neg() } else { axis }; // invert the mtv_axis direction if it is not from swept_shape_1 to swept_shape_2
+            normal = if delta.dot(axis) < 0.0 { axis.neg() } else { axis }; // invert the normal direction if it is not from swept_shape_1 to swept_shape_2
         }
     }
 
-    Some(mtv_axis)
+    Some(normal)
 }
 
-/// checks if 2 objects are colliding and returns the mtv
+/// checks if 2 objects are colliding and returns the contact normal
 /// it prechecks using hitboxes and if the hitboxes are colliding it switches to SAT algorithm
 fn check_collision(
     swept_shape_1: &components::SweptShape,
@@ -383,30 +383,33 @@ fn compute_reaction(
     world: &mut World,
     entity_1: entities::Entity,
     entity_2: entities::Entity,
-    mtv_axis: components::Vec2,
+    normal: components::Vec2,
 ) {
     // update rest
-    if mtv_axis.x.abs() <= 2.0 {
+    if normal.x.abs() <= 0.2 {
         // one is above the other
-        if mtv_axis.y > 0.0
+        if normal.y > 0.0
             && let Some(rigid_body) = world.rigid_body.get_mut(entity_1)
         {
             rigid_body.rest = true;
         }
 
-        if mtv_axis.y < 0.0
+        if normal.y < 0.0
             && let Some(rigid_body) = world.rigid_body.get_mut(entity_2)
         {
             rigid_body.rest = true;
         }
     }
 
-    let elast = {
-        let elast_1 = world.surface.get(entity_1).expect("missing surface").elast;
-        let elast_2 = world.surface.get(entity_2).expect("missing surface").elast;
-        elast_1.min(elast_2)
-    };
+    // compute elast and friction
+    let surface_1 = world.surface.get(entity_1).expect("missing surface");
+    let surface_2 = world.surface.get(entity_2).expect("missing surface");
 
+    let elast = surface_1.elast.min(surface_2.elast);
+    let static_friction = (surface_1.static_friction * surface_2.static_friction).sqrt();
+    let kinetic_friction = (surface_1.kinetic_friction * surface_2.kinetic_friction).sqrt();
+
+    // extract vel and inv_mass
     let (vel_1, inv_mass_1) = {
         let rigid_body = world.rigid_body.get(entity_1).expect("missing rigid_body");
         (rigid_body.vel, rigid_body.inv_mass())
@@ -420,14 +423,17 @@ fn compute_reaction(
         }
     };
 
-    // relative velocity from shape_1 to shape_2
-    // it is basically the vector from vel_1 to vel_2 projected on the mtv_axis
-    // remember that mtv_axis is the unit vector perpendicular to the edge with minimum overlap
-    let rel_vel = vel_2.sub(vel_1).dot(mtv_axis);
+    let inv_mass_sum = inv_mass_1 + inv_mass_2;
 
-    if rel_vel >= EPS {
+    // relative velocity from shape_1 to shape_2, vector from vel_1 to vel_2
+    let rel_vel = vel_2.sub(vel_1);
+    // normal_rel_vel_mag is basically rel_vel projected on the normal axis
+    // remember that normal is the unit vector perpendicular to the edge with minimum overlap
+    let normal_rel_vel_mag = rel_vel.dot(normal);
+
+    if normal_rel_vel_mag >= EPS {
         // object are not getting closer
-        // careful here, since objects resting on other objects have a negative rel_vel very close to 0
+        // careful here, since objects resting on other objects have a negative normal_rel_vel_mag very close to 0
         return;
     };
 
@@ -472,8 +478,9 @@ fn compute_reaction(
     // J = -vel_rel * (elast + 1) / (1 / mass_2 + 1 / mass_1)
     //
     // and rearranging:
-    // J = -((1 + elast) * rel_vel / (inv_mass_1 + inv_mass_2))
-    let impulse = -((1.0 + elast) * rel_vel / (inv_mass_1 + inv_mass_2));
+    // J = -((1 + elast) * normal_rel_vel_mag / (inv_mass_1 + inv_mass_2))
+    let impulse = -((1.0 + elast) * normal_rel_vel_mag / (inv_mass_sum));
+    let impulse_vector = normal.scale(impulse);
 
     // what we will do with impulse is simply this:
     // since:
@@ -482,29 +489,69 @@ fn compute_reaction(
     // we get:
     // delta_vel_n = J_n / mass_n
     //
-    // so that is the magnitude of delta_vel, the direction is simply the mtv_axis direction
+    // so that is the magnitude of delta_vel, the direction is simply the normal direction
 
     let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid_body");
-    rigid_body_1.vel.sub_mut(mtv_axis.scale(impulse * inv_mass_1)); // here we subtract the delta_vel (see above why)
+    rigid_body_1.vel.sub_mut(impulse_vector.scale(inv_mass_1)); // here we subtract the delta_vel (see above why)
 
-    // round velocity to 0 for object 1
-    if rigid_body_1.vel.x.abs() <= 0.6 {
-        rigid_body_1.vel.x = 0.0;
-    }
+    // round y velocity to 0 for object 1
     if rigid_body_1.vel.y.abs() <= 0.6 {
         rigid_body_1.vel.y = 0.0;
     }
 
-    if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
-        rigid_body_2.vel.add_mut(mtv_axis.scale(impulse * inv_mass_2)); // here we add the delta_vel (see above why)
+    // recompute vel_1
+    let vel_1 = rigid_body_1.vel;
 
-        // round velocity to 0 for object 2
-        if rigid_body_2.vel.x.abs() <= 0.6 {
-            rigid_body_2.vel.x = 0.0;
-        }
+    let vel_2 = if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
+        rigid_body_2.vel.add_mut(impulse_vector.scale(inv_mass_2)); // here we add the delta_vel (see above why)
+
+        // round y velocity to 0 for object 2
         if rigid_body_2.vel.y.abs() <= 0.6 {
             rigid_body_2.vel.y = 0.0;
         }
+
+        // recompute vel_2
+        rigid_body_2.vel
+    } else {
+        components::Vec2::new(0.0, 0.0)
+    };
+
+    // recompute rel_vel and normal_rel_vel_mag
+    let rel_vel = vel_2.sub(vel_1);
+    let normal_rel_vel_mag = rel_vel.dot(normal);
+
+    // compute friction
+    // tangent_rel_vel is the tangent component of rel_vel
+    let tangent_rel_vel = rel_vel.sub(normal.scale(normal_rel_vel_mag));
+    let tangent_rel_vel_mag = tangent_rel_vel.mag();
+
+    if tangent_rel_vel_mag < EPS {
+        // no tangential slip, so nothing to correct
+        return;
+    }
+
+    // tangent_unit is tangent_rel_vel normalized
+    let tangent_unit = tangent_rel_vel.scale(1.0 / tangent_rel_vel_mag); // I am not using .norm() because I've already computed the magnitude
+
+    let friction_impulse = -tangent_rel_vel_mag / (inv_mass_sum); // impulse that would completely stop the objects
+    let max_static = static_friction * impulse.abs(); // maximum impulse of static friction
+
+    let friction_impulse = if friction_impulse.abs() <= max_static {
+        // static friction cancels all slip
+        friction_impulse
+    } else {
+        // dynamic friction
+        -kinetic_friction * impulse.abs()
+    };
+
+    // compute the dynamic friction impulse
+    let friction_impulse_vector = tangent_unit.scale(friction_impulse);
+
+    let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid_body");
+    rigid_body_1.vel.sub_mut(friction_impulse_vector.scale(inv_mass_1));
+
+    if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
+        rigid_body_2.vel.add_mut(friction_impulse_vector.scale(inv_mass_2));
     }
 }
 
@@ -536,7 +583,7 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
         // check if entity_2 is dynamic or static and extract its velocity
         let vel_2 = world.rigid_body.get(entity_2).map(|rb| rb.vel);
 
-        let mtv_axis = {
+        let normal = {
             // generate swept_shapes
             let shape_1 = world.shape.get(entity_1).unwrap();
             let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1);
@@ -553,9 +600,9 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             check_collision(&swept_shape_1, &swept_shape_2)
         };
 
-        if let Some(mtv_axis) = mtv_axis {
+        if let Some(normal) = normal {
             // they are colliding
-            compute_reaction(world, entity_1, entity_2, mtv_axis);
+            compute_reaction(world, entity_1, entity_2, normal);
 
             // resolve_obj_collisions(world, entity_1, &ents);
             // resolve_obj_collisions(world, entity_2, &ents);

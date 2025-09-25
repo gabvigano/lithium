@@ -348,17 +348,25 @@ impl From<RigidBodySpec> for RigidBody {
 #[derive(Deserialize)]
 pub struct SurfaceSpec {
     pub elast: f32,
+    pub static_friction: f32,
+    pub kinetic_friction: f32,
 }
 
 #[derive(Clone, Debug)]
 pub struct Surface {
     pub elast: f32,
+    pub static_friction: f32,
+    pub kinetic_friction: f32,
 }
 
 impl Surface {
     #[inline]
-    pub fn new(elast: f32) -> Self {
-        Self { elast }
+    pub fn new(elast: f32, static_friction: f32, kinetic_friction: f32) -> Self {
+        Self {
+            elast,
+            static_friction,
+            kinetic_friction,
+        }
     }
 }
 
@@ -370,7 +378,7 @@ impl fmt::Display for Surface {
 
 impl From<SurfaceSpec> for Surface {
     fn from(spec: SurfaceSpec) -> Self {
-        Self::new(spec.elast)
+        Self::new(spec.elast, spec.static_friction, spec.kinetic_friction)
     }
 }
 

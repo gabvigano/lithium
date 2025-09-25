@@ -13,7 +13,7 @@
 [ ]     - when 2 dynamic objects hit each other too quickly (seems like vel > 40)
 [ ]     - when 2 dynamic objects fall on top of another dynamic object (?)
 [ ] implement collision support for all shapes
-[ ] make a more detail path-tracer (by only adding velocities, some information reguarding the path are lost, we should update position as well)
+[ ] make a more detailed path-tracer (by only adding velocities, some information reguarding the path are lost, we should update position as well)
 
 # system update
 [x] remove the collider component, keep only elast because the hitbox is generated during collisions handling
@@ -45,7 +45,7 @@
 [x] correctly update vertices for segment, triangle and polygon
 
 # physics
-[ ] more realistic physics with friction
+[x] more realistic physics with friction
 
 # system update
 [ ] review API and security: make components private when necessary
