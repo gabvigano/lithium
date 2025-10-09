@@ -4,6 +4,7 @@ use crate::{
         entities,
         systems::physics::{EPS, EPS_SQR},
     },
+    error,
     world::World,
 };
 
@@ -240,14 +241,20 @@ fn check_collision(
     None
 }
 
-/// generates a convec hull from a vector of points using monotone chain algorithm
-pub fn convex_hull(mut verts: Vec<components::Vec2>) -> Option<components::Polygon> {
+/// generates a convex hull from a vector of points using monotone chain algorithm
+pub fn convex_hull(mut verts: Vec<components::Vec2>) -> Result<components::Polygon, error::GeometryError> {
+    // precheck for an early return if too few vertices are given, although this check will be
+    // performed automatically when calling components::Polygon::new() at the end of this function
     if verts.len() < 3 {
-        return None;
+        return Err(error::GeometryError::TooFewVertices(verts.len()));
     }
 
     // sort by x and, if x is the same, by y
-    verts.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap().then(a.y.partial_cmp(&b.y).unwrap()));
+    verts.sort_by(|a, b| {
+        a.x.partial_cmp(&b.x)
+            .expect("impossible comparison (maybe nan)")
+            .then(a.y.partial_cmp(&b.y).expect("impossible comparison (maybe nan)"))
+    });
 
     fn walk<'a>(verts: impl IntoIterator<Item = &'a components::Vec2>) -> Vec<components::Vec2> {
         let mut boundary: Vec<components::Vec2> = Vec::new();
@@ -280,10 +287,10 @@ pub fn convex_hull(mut verts: Vec<components::Vec2>) -> Option<components::Polyg
     // concat
     bottom_boundary.extend(top_boundary);
 
-    Some(components::Polygon::new(bottom_boundary))
+    components::Polygon::new(bottom_boundary)
 }
 
-/// generates a swept shape from a moving shape
+/// generates a swept shape from a stationary or moving shape
 fn generate_swept_shape(
     pos_1: components::Vec2,
     pos_2: components::Vec2,
@@ -307,7 +314,7 @@ fn generate_swept_shape(
                 verts.push(pos_2.add(segment.b));
 
                 components::SweptShape::Moved {
-                    swept: convex_hull(verts).unwrap(),
+                    swept: convex_hull(verts).expect("we passed more than 3 verts"),
                 }
             }
             components::Shape::Triangle(triangle) => {
@@ -321,7 +328,7 @@ fn generate_swept_shape(
                 verts.push(pos_2.add(triangle.c));
 
                 components::SweptShape::Moved {
-                    swept: convex_hull(verts).unwrap(),
+                    swept: convex_hull(verts).expect("we passed more than 3 verts"),
                 }
             }
             components::Shape::Rect(rect) => {
@@ -332,7 +339,9 @@ fn generate_swept_shape(
                     let delta_y = (pos_1.y - pos_2.y).abs();
 
                     components::SweptShape::AxisRect {
-                        swept: components::Rect::new(rect.width, delta_y + rect.height),
+                        swept: components::Rect::new(rect.width, delta_y + rect.height).expect(
+                            "delta is always positive and the old rect is valid, so this should be always valid",
+                        ),
                         pos: components::Vec2::new(pos_1.x, min_y),
                     }
                 } else if (pos_1.y - pos_2.y).abs() <= EPS {
@@ -341,7 +350,9 @@ fn generate_swept_shape(
                     let delta_x = (pos_1.x - pos_2.x).abs();
 
                     components::SweptShape::AxisRect {
-                        swept: components::Rect::new(delta_x + rect.width, rect.height),
+                        swept: components::Rect::new(delta_x + rect.width, rect.height).expect(
+                            "delta is always positive and the old rect is valid, so this should be always valid",
+                        ),
                         pos: components::Vec2::new(min_x, pos_1.y),
                     }
                 } else {
@@ -357,7 +368,7 @@ fn generate_swept_shape(
                     verts.push(pos_2.add_scalar(rect.width, rect.height));
 
                     components::SweptShape::Moved {
-                        swept: convex_hull(verts).unwrap(),
+                        swept: convex_hull(verts).expect("we passed more than 3 verts"),
                     }
                 }
             }
@@ -371,7 +382,7 @@ fn generate_swept_shape(
                 }
 
                 components::SweptShape::Moved {
-                    swept: convex_hull(verts).unwrap(),
+                    swept: convex_hull(verts).expect("we passed more than 3 verts"),
                 }
             }
         }
@@ -389,13 +400,13 @@ fn compute_reaction(
     if normal.x.abs() <= 0.2 {
         // one is above the other
         if normal.y > 0.0
-            && let Some(rigid_body) = world.rigid_body.get_mut(entity_1)
+            && let Ok(rigid_body) = world.rigid_body.get_mut(entity_1)
         {
             rigid_body.rest = true;
         }
 
         if normal.y < 0.0
-            && let Some(rigid_body) = world.rigid_body.get_mut(entity_2)
+            && let Ok(rigid_body) = world.rigid_body.get_mut(entity_2)
         {
             rigid_body.rest = true;
         }
@@ -416,7 +427,7 @@ fn compute_reaction(
     };
 
     let (vel_2, inv_mass_2) = {
-        if let Some(rigid_body) = world.rigid_body.get(entity_2) {
+        if let Ok(rigid_body) = world.rigid_body.get(entity_2) {
             (rigid_body.vel, rigid_body.inv_mass())
         } else {
             (components::Vec2::new(0.0, 0.0), 0.0)
@@ -459,23 +470,23 @@ fn compute_reaction(
     // which is exactly what we were looking for
     //
     // 2) elast is definied as:
-    // vel_rel' = -elast * vel_rel
+    // rel_vel' = -elast * rel_vel
     //
     // 3) the relative velocity is:
-    // vel_rel = vel_2 - vel_1
+    // rel_vel = vel_2 - vel_1
     //
     // so the new relative velocity is:
-    // vel_rel' = vel_2' - vel_1'
+    // rel_vel' = vel_2' - vel_1'
     //
     // 4) replacing, we have:
-    // vel_rel' = (vel_2 + J / mass_2) - (vel_1 - J / mass_1)
-    // vel_rel' = vel_2 - vel_1 + J / mass_2 + J / mass_1
-    // vel_rel' = vel_rel + J * (1 / mass_2 + 1 / mass_1)
-    // -elast * vel_rel = vel_rel + J * (1 / mass_2 + 1 / mass_1)
-    // -elast * vel_rel - vel_rel = J * (1 / mass_2 + 1 / mass_1)
-    // vel_rel * (-elast - 1) = J * (1 / mass_2 + 1 / mass_1)
-    // -vel_rel * (elast + 1) = J * (1 / mass_2 + 1 / mass_1)
-    // J = -vel_rel * (elast + 1) / (1 / mass_2 + 1 / mass_1)
+    // rel_vel' = (vel_2 + J / mass_2) - (vel_1 - J / mass_1)
+    // rel_vel' = vel_2 - vel_1 + J / mass_2 + J / mass_1
+    // rel_vel' = rel_vel + J * (1 / mass_2 + 1 / mass_1)
+    // -elast * rel_vel = rel_vel + J * (1 / mass_2 + 1 / mass_1)
+    // -elast * rel_vel - rel_vel = J * (1 / mass_2 + 1 / mass_1)
+    // rel_vel * (-elast - 1) = J * (1 / mass_2 + 1 / mass_1)
+    // -rel_vel * (elast + 1) = J * (1 / mass_2 + 1 / mass_1)
+    // J = -rel_vel * (elast + 1) / (1 / mass_2 + 1 / mass_1)
     //
     // and rearranging:
     // J = -((1 + elast) * normal_rel_vel_mag / (inv_mass_1 + inv_mass_2))
@@ -502,7 +513,7 @@ fn compute_reaction(
     // recompute vel_1
     let vel_1 = rigid_body_1.vel;
 
-    let vel_2 = if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
+    let vel_2 = if let Ok(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
         rigid_body_2.vel.add_mut(impulse_vector.scale(inv_mass_2)); // here we add the delta_vel (see above why)
 
         // round y velocity to 0 for object 2
@@ -550,17 +561,18 @@ fn compute_reaction(
     let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid_body");
     rigid_body_1.vel.sub_mut(friction_impulse_vector.scale(inv_mass_1));
 
-    if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
+    if let Ok(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
         rigid_body_2.vel.add_mut(friction_impulse_vector.scale(inv_mass_2));
     }
 }
 
-/// recursively resolves all collisions for a given object
+/// resolves all collisions for a given object
 fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &Vec<entities::Entity>) {
-    // checks the presence and extracts the position, velocity and shape of entity_1
-    let (Some(&components::Transform { pos: pos_1, .. }), Some(&components::RigidBody { vel: vel_1, .. }), Some(_)) = (
+    // checks entity_1 has all the components necessary for being a dynamic object and extracts its position and velocity
+    let (Ok(&components::Transform { pos: pos_1, .. }), Ok(&components::RigidBody { vel: vel_1, .. }), Ok(_), Ok(_)) = (
         world.transform.get(entity_1),
         world.rigid_body.get(entity_1),
+        world.surface.get(entity_1),
         world.shape.get(entity_1),
     ) else {
         // entity is not a dynamic object
@@ -573,10 +585,12 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             continue;
         };
 
-        // checks the presence and extracts the position and shape of entity_2
-        let (Some(&components::Transform { pos: pos_2, .. }), Some(shape_2)) =
-            (world.transform.get(entity_2), world.shape.get(entity_2))
-        else {
+        // checks entity_2 has all the components necessary for being at least a static object and extracts its position and shape
+        let (Ok(&components::Transform { pos: pos_2, .. }), Ok(_), Ok(shape_2)) = (
+            world.transform.get(entity_2),
+            world.surface.get(entity_2),
+            world.shape.get(entity_2),
+        ) else {
             continue;
         };
 
@@ -585,15 +599,18 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
 
         let normal = {
             // generate swept_shapes
-            let shape_1 = world.shape.get(entity_1).unwrap();
-            let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1);
 
-            let swept_shape_2 = if vel_2.is_none() {
+            // re-extract shape_1 for each loop iteration because if it has not moved, swept_shape will take a reference to it and since world owns the shape,
+            // since we are passing world to compute_reaction() as a mutable reference we cannot have it borrowed also as immutable
+            let shape_1 = world.shape.get(entity_1).expect("missing shape");
+            let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1); // we are also recomputing the swept_shape at every iteration since its velocity may have changed
+
+            let swept_shape_2 = if vel_2.is_err() {
                 // it is static, generate fixed swept_shape
                 generate_swept_shape(pos_2, pos_2, shape_2)
             } else {
                 // it is dynamic, generate swept_shape
-                generate_swept_shape(pos_2, pos_2.add(vel_2.unwrap()), shape_2)
+                generate_swept_shape(pos_2, pos_2.add(vel_2.expect("missing vel")), shape_2)
             };
 
             // check collision

@@ -28,16 +28,14 @@
 [x] add CONTRIBUTING.md
 [x] add LICENSE.md
 
-# collisions
-[ ] stabilize collision detector (hardcode values to counteract approximations)
-
 # system update
 > look for optimizations:
 [ ]     - in collisions, we can use an algorithm faster than the monotone chain algorithm when the polygons translate without rotating.
 [ ]     - in collisions, we can implement triangles and rectangles as special cases.
+[ ]     - in collisions, if we keep the iteration instead of the recursion we can early return when no more collisions are detected
 > look for bugs:
 [ ]     - check if convex_hull() works for a segment that moves along itself (so its vertices are collinear, and mybe only 2 are taken)
-[ ] better exception handling with Result instead of panic
+[x] better exception handling with Result instead of panic
 [ ] refactor code (rename variables and functions, write comments and docstring)
 
 # rendering
@@ -45,7 +43,19 @@
 [x] correctly update vertices for segment, triangle and polygon
 
 # physics
-[x] more realistic physics with friction
+[x] more realistic physics with friction2
 
 # system update
 [ ] review API and security: make components private when necessary
+[ ] support transform rotation (manually rotate objects)
+
+# physics
+[ ] support physical rotation (so angular velocity and acceleration...)
+
+# rendering
+[ ] switch to winit + wgpu for graphics
+[ ] particle system
+[ ] textures support
+
+# audio
+[ ] audio support

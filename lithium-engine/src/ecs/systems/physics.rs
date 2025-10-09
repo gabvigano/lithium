@@ -1,5 +1,6 @@
 use crate::{
     ecs::{components, entities},
+    error,
     world::World,
 };
 
@@ -13,15 +14,10 @@ pub fn pow2(x: f32) -> f32 {
 
 #[inline]
 fn clamp_toward_zero(value: f32, limit: Option<f32>) -> f32 {
-    if limit.is_none() {
-        value
-    } else {
-        let limit = limit.unwrap();
-        if limit > 0.0 {
-            value.min(limit)
-        } else {
-            value.max(limit)
-        }
+    match limit {
+        Some(limit) if limit > 0.0 => value.min(limit),
+        Some(limit) => value.max(limit),
+        None => value,
     }
 }
 
@@ -56,7 +52,7 @@ pub fn reset_force(world: &mut World, new_force: components::Vec2) {
 #[inline]
 pub fn update_pos(world: &mut World) {
     for (entity, transform) in world.transform.iter_mut() {
-        if let Some(components::RigidBody { vel, .. }) = world.rigid_body.get(entity) {
+        if let Ok(components::RigidBody { vel, .. }) = world.rigid_body.get(entity) {
             transform.pos.add_mut(*vel);
         }
     }
@@ -75,8 +71,8 @@ pub fn apply_axis_vel(
     new_vel: f32,
     limit: Option<f32>,
     axis: components::Axis,
-) {
-    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
+) -> Result<(), error::ComponentError> {
+    let rigid_body = world.rigid_body.get_mut(entity)?;
 
     match axis {
         components::Axis::Horizontal => {
@@ -86,13 +82,22 @@ pub fn apply_axis_vel(
             rigid_body.vel.y = clamp_toward_zero(rigid_body.vel.y + new_vel, limit);
         }
     }
+
+    Ok(())
 }
 
-pub fn apply_vel(world: &mut World, entity: entities::Entity, new_vel: components::Vec2, limit: Option<f32>) {
-    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
+pub fn apply_vel(
+    world: &mut World,
+    entity: entities::Entity,
+    new_vel: components::Vec2,
+    limit: Option<f32>,
+) -> Result<(), error::ComponentError> {
+    let rigid_body = world.rigid_body.get_mut(entity)?;
 
     rigid_body.vel.x = clamp_toward_zero(rigid_body.vel.x + new_vel.x, limit);
     rigid_body.vel.y = clamp_toward_zero(rigid_body.vel.y + new_vel.y, limit);
+
+    Ok(())
 }
 
 pub fn apply_axis_force(
@@ -101,8 +106,8 @@ pub fn apply_axis_force(
     new_force: f32,
     limit: Option<f32>,
     axis: components::Axis,
-) {
-    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
+) -> Result<(), error::ComponentError> {
+    let rigid_body = world.rigid_body.get_mut(entity)?;
 
     match axis {
         components::Axis::Horizontal => {
@@ -112,10 +117,18 @@ pub fn apply_axis_force(
             rigid_body.force.y = clamp_toward_zero(rigid_body.force.y + new_force, limit);
         }
     }
+
+    Ok(())
 }
 
-pub fn apply_force(world: &mut World, entity: entities::Entity, new_force: components::Vec2) {
-    let rigid_body = world.rigid_body.get_mut(entity).expect("missing rigid_body");
+pub fn apply_force(
+    world: &mut World,
+    entity: entities::Entity,
+    new_force: components::Vec2,
+) -> Result<(), error::ComponentError> {
+    let rigid_body = world.rigid_body.get_mut(entity)?;
 
     rigid_body.force.add_mut(new_force);
+
+    Ok(())
 }

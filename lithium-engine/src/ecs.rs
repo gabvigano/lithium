@@ -1,3 +1,5 @@
+use crate::error;
+
 pub mod components;
 pub mod entities;
 pub mod systems;
@@ -17,7 +19,7 @@ impl<T> SparseSet<T> {
         }
     }
 
-    pub fn insert(&mut self, entity: entities::Entity, component: T) {
+    pub fn insert(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
         let index = self.components.len();
         let sparse_id = entity as usize;
 
@@ -27,12 +29,14 @@ impl<T> SparseSet<T> {
         }
 
         if self.sparse[sparse_id].is_some() {
-            panic!("entity {entity} already has component");
+            return Err(error::ComponentError::AlreadyExistingComponent(entity));
         }
 
         self.components.push(component);
         self.entities.push(entity);
         self.sparse[sparse_id] = Some(index);
+
+        Ok(())
     }
 
     pub fn remove(&mut self, entity: entities::Entity) -> Option<T> {
@@ -63,14 +67,22 @@ impl<T> SparseSet<T> {
         Some(())
     }
 
-    pub fn get(&self, entity: entities::Entity) -> Option<&T> {
+    pub fn get(&self, entity: entities::Entity) -> Result<&T, error::ComponentError> {
         let sparse_id = entity as usize;
-        self.sparse.get(sparse_id)?.map(|index| &self.components[index])
+        self.sparse
+            .get(sparse_id)
+            .ok_or(error::ComponentError::MissingComponent(entity))?
+            .map(|index| &self.components[index])
+            .ok_or(error::ComponentError::MissingComponent(entity))
     }
 
-    pub fn get_mut(&mut self, entity: entities::Entity) -> Option<&mut T> {
+    pub fn get_mut(&mut self, entity: entities::Entity) -> Result<&mut T, error::ComponentError> {
         let sparse_id = entity as usize;
-        self.sparse.get(sparse_id)?.map(|index| &mut self.components[index])
+        self.sparse
+            .get(sparse_id)
+            .ok_or(error::ComponentError::MissingComponent(entity))?
+            .map(|index| &mut self.components[index])
+            .ok_or(error::ComponentError::MissingComponent(entity))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (entities::Entity, &T)> {

@@ -1,4 +1,7 @@
-use crate::ecs::systems::physics::{EPS, pow2};
+use crate::{
+    ecs::systems::physics::{EPS, pow2},
+    error,
+};
 
 use serde::Deserialize;
 use std::fmt;
@@ -292,18 +295,18 @@ pub struct RigidBody {
 
 impl RigidBody {
     #[inline]
-    pub fn new(vel: Vec2, force: Vec2, mass: f32, rest: bool) -> Self {
+    pub fn new(vel: Vec2, force: Vec2, mass: f32, rest: bool) -> Result<Self, error::MathError> {
         if mass <= 0.0 {
-            panic!("mass must be positive");
+            return Err(error::MathError::NonPositive("mass"));
         }
 
-        Self {
+        Ok(Self {
             vel,
             force,
             mass,
             inv_mass: 1.0 / mass,
             rest,
-        }
+        })
     }
 
     #[inline]
@@ -339,8 +342,10 @@ impl fmt::Display for RigidBody {
     }
 }
 
-impl From<RigidBodySpec> for RigidBody {
-    fn from(spec: RigidBodySpec) -> Self {
+impl TryFrom<RigidBodySpec> for RigidBody {
+    type Error = error::MathError;
+
+    fn try_from(spec: RigidBodySpec) -> Result<Self, Self::Error> {
         Self::new(spec.vel, spec.force, spec.mass, false)
     }
 }
@@ -776,16 +781,16 @@ pub struct Rect {
 
 impl Rect {
     #[inline]
-    pub fn new(width: f32, height: f32) -> Self {
+    pub fn new(width: f32, height: f32) -> Result<Self, error::MathError> {
         if width <= 0.0 {
-            panic!("width must be greater than 0")
+            return Err(error::MathError::NonPositive("width"));
         }
 
         if height <= 0.0 {
-            panic!("height must be greater than 0")
+            return Err(error::MathError::NonPositive("height"));
         }
 
-        Self { width, height }
+        Ok(Self { width, height })
     }
 }
 
@@ -809,12 +814,12 @@ pub struct Circle {
 
 impl Circle {
     #[inline]
-    pub fn new(radius: f32) -> Self {
+    pub fn new(radius: f32) -> Result<Self, error::MathError> {
         if radius <= 0.0 {
-            panic!("radius must be greater than 0")
+            return Err(error::MathError::NonPositive("radius"));
         }
 
-        Self { radius }
+        Ok(Self { radius })
     }
 }
 
@@ -841,22 +846,21 @@ pub struct Polygon {
 
 impl Polygon {
     #[inline]
-    pub fn new(verts: Vec<Vec2>) -> Self {
+    pub fn new(verts: Vec<Vec2>) -> Result<Self, error::GeometryError> {
         let polygon = Self { verts };
-        if !polygon.is_valid() {
-            panic!("polygon is not valid");
-        }
 
-        polygon
+        polygon.validate()?;
+
+        Ok(polygon)
     }
 
-    pub fn is_valid(&self) -> bool {
+    pub fn validate(&self) -> Result<(), error::GeometryError> {
         let verts_len = self.verts.len();
 
         if verts_len < 3 {
-            panic!("cannot build a polygon with only {} vertices", verts_len);
+            return Err(error::GeometryError::TooFewVertices(verts_len));
         } else if verts_len == 3 {
-            panic!("use Shape::Triangle as it is more efficient");
+            eprintln!("warning: polygon with 3 vertices, consider Shape::Triangle for efficiency");
         }
 
         // check duplicates vertices
@@ -864,7 +868,7 @@ impl Polygon {
         for i in 0..verts_len {
             for j in (i + 1)..verts_len {
                 if (self.verts[i].x - self.verts[j].x).abs() < EPS && (self.verts[i].y - self.verts[j].y).abs() < EPS {
-                    panic!("near-duplicate points");
+                    return Err(error::GeometryError::DuplicateVertices);
                 }
             }
         }
@@ -879,13 +883,11 @@ impl Polygon {
             let cross = a.cross(b);
 
             if cross <= EPS {
-                panic!(
-                    "({}-{}) and ({}-{}) are collinear or clockwise but they must be counterclockwise",
-                    i, i1, i1, i2
-                );
+                return Err(error::GeometryError::NotConvex);
             }
         }
-        true
+
+        Ok(())
     }
 }
 
@@ -923,36 +925,36 @@ impl fmt::Display for Polygon {
     }
 }
 
-#[derive(Copy, Clone, Deserialize, Debug)]
-pub struct Line {
-    pub m: f32,
-    pub q: f32,
-}
+// #[derive(Copy, Clone, Deserialize, Debug)]
+// pub struct Line {
+//     pub m: f32,
+//     pub q: f32,
+// }
 
-impl Line {
-    #[inline]
-    pub fn new(m: f32, q: f32) -> Self {
-        Self { m, q }
-    }
+// impl Line {
+//     #[inline]
+//     pub fn new(m: f32, q: f32) -> Self {
+//         Self { m, q }
+//     }
 
-    #[inline]
-    pub fn from(segment: Segment) -> Self {
-        let delta_x = segment.b.x - segment.a.x;
-        let delta_y = segment.b.y - segment.a.y;
+//     #[inline]
+//     pub fn from(segment: Segment) -> Self {
+//         let delta_x = segment.b.x - segment.a.x;
+//         let delta_y = segment.b.y - segment.a.y;
 
-        let (m, q) = if delta_x.abs() <= EPS {
-            (None, None)
-        } else {
-            let m = delta_y / delta_x;
-            (Some(m), Some(segment.a.y - m * segment.a.x))
-        };
+//         let (m, q) = if delta_x.abs() <= EPS {
+//             (None, None)
+//         } else {
+//             let m = delta_y / delta_x;
+//             (Some(m), Some(segment.a.y - m * segment.a.x))
+//         };
 
-        Self {
-            m: m.expect("m is None"),
-            q: q.expect("q is None"),
-        }
-    }
-}
+//         Self {
+//             m: m.expect("m is None"),
+//             q: q.expect("q is None"),
+//         }
+//     }
+// }
 
 // OBJECTS
 

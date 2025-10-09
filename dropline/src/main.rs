@@ -34,40 +34,55 @@ async fn main() {
     let mut world = World::new();
 
     // load game map
-    let _static_map = loader::load_static_map("assets/map/static.ron", &mut world, &mut entity_manager);
-    let _dynamic_map = loader::load_dynamic_map("assets/map/dynamic.ron", &mut world, &mut entity_manager);
+    let _static_map = loader::load_static_map("assets/map/static.ron", &mut world, &mut entity_manager).unwrap();
+    let _dynamic_map = loader::load_dynamic_map("assets/map/dynamic.ron", &mut world, &mut entity_manager).unwrap();
 
     // create player
     let player = entity_manager.create();
     let player_spawn = components::Vec2::new(150.0, 100.0);
-    world.transform.insert(
-        player,
-        components::Transform::new(player_spawn, player_spawn, components::Angle { radians: 0.0 }),
-    );
-    world.rigid_body.insert(
-        player,
-        components::RigidBody::new(
-            components::Vec2::new(0.0, 0.0),
-            components::Vec2::new(0.0, 0.0),
-            1.0,
-            false,
-        ),
-    );
-    world.surface.insert(player, components::Surface::new(0.5, 0.2, 0.15));
-    world.shape.insert(
-        player,
-        // components::Shape::Circle(components::Circle::new(10.0)),
-        components::Shape::Rect(components::Rect::new(15.0, 15.0)),
-    );
-    world.material.insert(
-        player,
-        components::Material::new(components::Color::new(0, 255, 0, 255), 2, true),
-    );
+    world
+        .transform
+        .insert(
+            player,
+            components::Transform::new(player_spawn, player_spawn, components::Angle { radians: 0.0 }),
+        )
+        .unwrap();
+    world
+        .rigid_body
+        .insert(
+            player,
+            components::RigidBody::new(
+                components::Vec2::new(0.0, 0.0),
+                components::Vec2::new(0.0, 0.0),
+                1.0,
+                false,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    world
+        .surface
+        .insert(player, components::Surface::new(0.5, 0.2, 0.15))
+        .unwrap();
+    world
+        .shape
+        .insert(
+            player,
+            components::Shape::Rect(components::Rect::new(15.0, 15.0).unwrap()),
+        )
+        .unwrap();
+    world
+        .material
+        .insert(
+            player,
+            components::Material::new(components::Color::new(0, 255, 0, 255), 2, true),
+        )
+        .unwrap();
 
     // create camera
     let mut camera = scene::Camera::new(
         components::Vec2::new(0.0, -100.0),
-        components::Rect::new(prelude::screen_width(), prelude::screen_height()),
+        components::Rect::new(prelude::screen_width(), prelude::screen_height()).unwrap(),
     );
 
     // game loop
@@ -79,21 +94,21 @@ async fn main() {
         physics::reset_force(&mut world, GRAVITY);
 
         // handle user inputs
-        if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).expect("missing rigid_body").rest {
-            physics::apply_axis_vel(&mut world, player, -12.0, Some(-12.0), components::Axis::Vertical);
+        if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).unwrap().rest {
+            physics::apply_axis_vel(&mut world, player, -12.0, Some(-12.0), components::Axis::Vertical).unwrap();
             // physics::apply_axis_force(&mut world, player, -5.0, None, components::Axis::Vertical);
         }
         // let vel_x = world.rigid_body.get(player).expect("missing rigid_body").vel.x;
         if prelude::is_key_down(prelude::KeyCode::D)
         /*&& vel_x < 7.0*/
         {
-            physics::apply_axis_vel(&mut world, player, 1.0, Some(10.0), components::Axis::Horizontal);
+            physics::apply_axis_vel(&mut world, player, 1.0, Some(10.0), components::Axis::Horizontal).unwrap();
             // physics::apply_axis_force(&mut world, player, 2.0, None, components::Axis::Horizontal);
         }
         if prelude::is_key_down(prelude::KeyCode::A)
         /*&& vel_x > -7.0*/
         {
-            physics::apply_axis_vel(&mut world, player, -1.0, Some(-10.0), components::Axis::Horizontal);
+            physics::apply_axis_vel(&mut world, player, -1.0, Some(-10.0), components::Axis::Horizontal).unwrap();
             // physics::apply_axis_force(&mut world, player, -2.0, None, components::Axis::Horizontal);
         }
         if prelude::is_key_down(prelude::KeyCode::R) {
