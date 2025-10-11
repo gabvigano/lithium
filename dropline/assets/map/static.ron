@@ -6,9 +6,9 @@
         material: (color: (r: 255, g: 255, b: 255, a: 255), layer: 0, show: true),
     ),
     (
-        transform: (spawn: (x: 0.0, y: 450.0), angle: (radians: 0.0)),
+        transform: (spawn: (x: -300.0, y: 400.0), angle: (radians: 0.0)),
         surface: (elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15),
-        shape: Rect((width: 75.0, height: 50.0)),
+        shape: Rect((width: 150.0, height: 50.0)),
         material: (color: (r: 155, g: 155, b: 255, a: 255), layer: 0, show: true),
     ),
     (

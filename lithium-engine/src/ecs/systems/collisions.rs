@@ -567,16 +567,18 @@ fn compute_reaction(
 }
 
 /// resolves all collisions for a given object
-fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &Vec<entities::Entity>) {
-    // checks entity_1 has all the components necessary for being a dynamic object and extracts its position and velocity
-    let (Ok(&components::Transform { pos: pos_1, .. }), Ok(&components::RigidBody { vel: vel_1, .. }), Ok(_), Ok(_)) = (
+fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &Vec<entities::Entity>) -> bool {
+    let mut solved = true;
+
+    // checks entity_1 has all the components necessary for being a dynamic object and extracts its position
+    let (Ok(&components::Transform { pos: pos_1, .. }), Ok(_), Ok(_), Ok(_)) = (
         world.transform.get(entity_1),
         world.rigid_body.get(entity_1),
         world.surface.get(entity_1),
         world.shape.get(entity_1),
     ) else {
         // entity is not a dynamic object
-        return;
+        return true; // in this case it counts as solved
     };
 
     for &entity_2 in ents {
@@ -600,9 +602,12 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
         let normal = {
             // generate swept_shapes
 
-            // re-extract shape_1 for each loop iteration because if it has not moved, swept_shape will take a reference to it and since world owns the shape,
-            // since we are passing world to compute_reaction() as a mutable reference we cannot have it borrowed also as immutable
-            let shape_1 = world.shape.get(entity_1).expect("missing shape");
+            // re-extract vel_1 and shape_1: vel_1 because it may have changed by compute_reaction(), shape_1 because if it has not moved, swept_shape_1 will keep a reference to it,
+            // and since we need to pass a mutable reference of world to compute_reaction() and world owns shape_1, we cannot have both a mutable and unmutable reference at the same time
+            let (&components::RigidBody { vel: vel_1, .. }, shape_1) = (
+                world.rigid_body.get(entity_1).expect("missing rigid_body"),
+                world.shape.get(entity_1).expect("missing shape"),
+            );
             let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1); // we are also recomputing the swept_shape at every iteration since its velocity may have changed
 
             let swept_shape_2 = if vel_2.is_err() {
@@ -618,13 +623,14 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
         };
 
         if let Some(normal) = normal {
+            solved = false;
+
             // they are colliding
             compute_reaction(world, entity_1, entity_2, normal);
-
-            // resolve_obj_collisions(world, entity_1, &ents);
-            // resolve_obj_collisions(world, entity_2, &ents);
         }
     }
+
+    solved
 }
 
 /// sorts by y all the objects that own a position, from minimum to maximum
@@ -651,18 +657,25 @@ fn sort_objs_by_y(world: &mut World) -> Vec<entities::Entity> {
 }
 
 /// launches resolve_obj_collisions for each object
-pub fn resolve_collisions(world: &mut World, sort: bool) {
+pub fn resolve_collisions(world: &mut World, sort: bool, iters: usize) {
     let ents = if sort {
-        // sort entities by y, with the highest being first, in order to optimize computations for objects resting on top of other objects
-        // in addition, we can now iterate through this vector instead of calling a method multiple times
+        // sort entities by y, with the highest (visually on the screen) being first, in order to optimize computations for objects resting on top of other objects
+        // in addition, we can now iterate through this vector instead of calling a method multiple times to get the y
         sort_objs_by_y(world)
     } else {
         world.transform.get_ents()
     };
 
-    for _ in 0..5 {
+    for _ in 0..iters {
+        let mut solved = true;
         for &entity in ents.iter() {
-            resolve_obj_collisions(world, entity, &ents);
+            if !resolve_obj_collisions(world, entity, &ents) {
+                solved = false;
+            }
+        }
+
+        if solved {
+            break;
         }
     }
 }

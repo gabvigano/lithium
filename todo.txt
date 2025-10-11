@@ -30,9 +30,9 @@
 
 # system update
 > look for optimizations:
-[ ]     - in collisions, we can use an algorithm faster than the monotone chain algorithm when the polygons translate without rotating.
-[ ]     - in collisions, we can implement triangles and rectangles as special cases.
-[ ]     - in collisions, if we keep the iteration instead of the recursion we can early return when no more collisions are detected
+[ ]     - in collisions, we can use an algorithm faster than the monotone chain algorithm when the polygons translate without rotating
+[ ]     - in collisions, we can implement triangles and rectangles as special cases
+[x]     - in collisions, if we keep the iteration instead of the recursion we can early return when no more collisions are detected
 > look for bugs:
 [ ]     - check if convex_hull() works for a segment that moves along itself (so its vertices are collinear, and mybe only 2 are taken)
 [x] better exception handling with Result instead of panic

@@ -123,7 +123,7 @@ async fn main() {
         // update world and camera
         physics::update_vel(&mut world);
         physics::reset_rest(&mut world);
-        collisions::resolve_collisions(&mut world, true);
+        collisions::resolve_collisions(&mut world, true, 5);
         physics::update_pos(&mut world);
 
         camera.update(world.transform.get(player).expect("missing transform").pos);

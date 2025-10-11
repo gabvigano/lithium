@@ -3,8 +3,15 @@
         transform: (spawn: (x: 1200.0, y: -100.0), angle: (radians: 0.0)),
         rigid_body: (vel: (x: 0.0, y: 0.0), force: (x: 0.0, y: 0.0), mass: 5.0),
         surface: (elast: 0.5, static_friction: 0.2, kinetic_friction: 0.15),
-        shape: Rect((width: 75.0, height: 75.0)),
+        shape: Rect((width: 80.0, height: 80.0)),
         material: (color: (r: 255, g: 0, b: 255, a: 255), layer: 2, show: true),
+    ),
+    (
+        transform: (spawn: (x: 400.0, y: 400.0), angle: (radians: 0.0)),
+        rigid_body: (vel: (x: 0.0, y: 0.0), force: (x: 0.0, y: 0.0), mass: 4.0),
+        surface: (elast: 0.6, static_friction: 0.2, kinetic_friction: 0.15),
+        shape: Rect((width: 65.0, height: 65.0)),
+        material: (color: (r: 255, g: 0, b: 0, a: 255), layer: 2, show: true),
     ),
     (
         transform: (spawn: (x: 200.0, y: 0.0), angle: (radians: 0.0)),
@@ -19,5 +26,12 @@
         surface: (elast: 0.5, static_friction: 0.2, kinetic_friction: 0.15),
         shape: Rect((width: 15.0, height: 15.0)),
         material: (color: (r: 0, g: 255, b: 255, a: 255), layer: 2, show: true),
+    ),
+    (
+        transform: (spawn: (x: 425.0, y: 300.0), angle: (radians: 0.0)),
+        rigid_body: (vel: (x: 0.0, y: 0.0), force: (x: 0.0, y: 0.0), mass: 0.5),
+        surface: (elast: 0.65, static_friction: 0.2, kinetic_friction: 0.15),
+        shape: Rect((width: 15.0, height: 15.0)),
+        material: (color: (r: 0, g: 0, b: 255, a: 255), layer: 2, show: true),
     ),
 ]
