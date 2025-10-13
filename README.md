@@ -44,7 +44,7 @@ cargo run
 
 ### 🎥 Demo
 
-![lithium-engine demo](media/lithium_1.gif)
+![lithium-engine demo](media/lithium_2.gif)
 
 ---
 
