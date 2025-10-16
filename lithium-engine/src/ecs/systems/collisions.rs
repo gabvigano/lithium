@@ -506,7 +506,7 @@ fn compute_reaction(
     rigid_body_1.vel.sub_mut(impulse_vector.scale(inv_mass_1)); // here we subtract the delta_vel (see above why)
 
     // round y velocity to 0 for object 1
-    if rigid_body_1.vel.y.abs() <= 0.6 {
+    if rigid_body_1.rest && rigid_body_1.vel.y.abs() <= 0.6 {
         rigid_body_1.vel.y = 0.0;
     }
 
@@ -517,7 +517,7 @@ fn compute_reaction(
         rigid_body_2.vel.add_mut(impulse_vector.scale(inv_mass_2)); // here we add the delta_vel (see above why)
 
         // round y velocity to 0 for object 2
-        if rigid_body_2.vel.y.abs() <= 0.6 {
+        if rigid_body_2.rest && rigid_body_2.vel.y.abs() <= 0.6 {
             rigid_body_2.vel.y = 0.0;
         }
 
