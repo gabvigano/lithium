@@ -59,30 +59,27 @@ impl<T> SparseSet<T> {
         removed
     }
 
-    pub fn set(&mut self, entity: entities::Entity, component: T) -> Option<()> {
+    pub fn set(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
         let sparse_id = entity as usize;
-        let index = *self.sparse.get_mut(sparse_id)?.as_ref()?;
+        let index = *self
+            .sparse
+            .get_mut(sparse_id)
+            .ok_or(error::ComponentError::MissingComponent(entity))?
+            .as_ref()
+            .ok_or(error::ComponentError::MissingComponent(entity))?;
 
         self.components[index] = component;
-        Some(())
+        Ok(())
     }
 
-    pub fn get(&self, entity: entities::Entity) -> Result<&T, error::ComponentError> {
+    pub fn get(&self, entity: entities::Entity) -> Option<&T> {
         let sparse_id = entity as usize;
-        self.sparse
-            .get(sparse_id)
-            .ok_or(error::ComponentError::MissingComponent(entity))?
-            .map(|index| &self.components[index])
-            .ok_or(error::ComponentError::MissingComponent(entity))
+        self.sparse.get(sparse_id)?.map(|index| &self.components[index])
     }
 
-    pub fn get_mut(&mut self, entity: entities::Entity) -> Result<&mut T, error::ComponentError> {
+    pub fn get_mut(&mut self, entity: entities::Entity) -> Option<&mut T> {
         let sparse_id = entity as usize;
-        self.sparse
-            .get(sparse_id)
-            .ok_or(error::ComponentError::MissingComponent(entity))?
-            .map(|index| &mut self.components[index])
-            .ok_or(error::ComponentError::MissingComponent(entity))
+        self.sparse.get(sparse_id)?.map(|index| &mut self.components[index])
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (entities::Entity, &T)> {

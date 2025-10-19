@@ -1,5 +1,5 @@
 use crate::{
-    ecs::systems::physics::{EPS, pow2},
+    ecs::systems::physics::{EPS, EPS_SQR, pow2},
     error,
 };
 
@@ -214,15 +214,45 @@ pub struct TransformSpec {
 
 #[derive(Clone, Debug)]
 pub struct Transform {
-    pub spawn: Vec2,
-    pub pos: Vec2,
-    pub angle: Angle,
+    pub(crate) spawn: Vec2,
+    pub(crate) pos: Vec2,
+    pub(crate) angle: Angle,
 }
 
 impl Transform {
     #[inline]
     pub fn new(spawn: Vec2, pos: Vec2, angle: Angle) -> Self {
         Self { spawn, pos, angle }
+    }
+
+    #[inline]
+    pub fn spawn(&self) -> Vec2 {
+        self.spawn
+    }
+
+    #[inline]
+    pub fn pos(&self) -> Vec2 {
+        self.pos
+    }
+
+    #[inline]
+    pub fn angle(&self) -> Angle {
+        self.angle
+    }
+
+    #[inline]
+    pub fn set_spawn(&mut self, new_spawn: Vec2) {
+        self.spawn = new_spawn;
+    }
+
+    #[inline]
+    pub fn set_pos(&mut self, new_pos: Vec2) {
+        self.pos = new_pos
+    }
+
+    #[inline]
+    pub fn set_angle(&mut self, new_angle: Angle) {
+        self.angle = new_angle;
     }
 
     #[inline]
@@ -286,11 +316,11 @@ pub struct RigidBodySpec {
 
 #[derive(Clone, Debug)]
 pub struct RigidBody {
-    pub vel: Vec2,
-    pub force: Vec2,
+    pub(crate) vel: Vec2,
+    pub(crate) force: Vec2,
     mass: f32,
     inv_mass: f32,
-    pub rest: bool,
+    pub(crate) rest: bool,
 }
 
 impl RigidBody {
@@ -310,25 +340,49 @@ impl RigidBody {
     }
 
     #[inline]
-    pub fn reset_vel(&mut self, new_vel: Vec2) {
-        self.vel = new_vel;
+    pub fn vel(&self) -> Vec2 {
+        self.vel
     }
 
     #[inline]
-    pub fn reset_force(&mut self, new_force: Vec2) {
-        self.force = new_force;
+    pub fn force(&self) -> Vec2 {
+        self.force
     }
 
+    #[inline]
     pub fn mass(&self) -> f32 {
         self.mass
     }
+
+    #[inline]
     pub fn inv_mass(&self) -> f32 {
         self.inv_mass
     }
 
-    pub fn set_mass(&mut self, mass: f32) {
-        self.mass = mass;
-        self.inv_mass = 1.0 / mass;
+    #[inline]
+    pub fn rest(&self) -> bool {
+        self.rest
+    }
+
+    #[inline]
+    pub fn set_vel(&mut self, new_vel: Vec2) {
+        self.vel = new_vel;
+    }
+
+    #[inline]
+    pub fn set_force(&mut self, new_force: Vec2) {
+        self.force = new_force;
+    }
+
+    #[inline]
+    pub fn set_mass(&mut self, new_mass: f32) {
+        self.mass = new_mass;
+        self.inv_mass = 1.0 / new_mass;
+    }
+
+    #[inline]
+    pub fn set_rest(&mut self, new_rest: bool) {
+        self.rest = new_rest;
     }
 }
 
@@ -359,9 +413,9 @@ pub struct SurfaceSpec {
 
 #[derive(Clone, Debug)]
 pub struct Surface {
-    pub elast: f32,
-    pub static_friction: f32,
-    pub kinetic_friction: f32,
+    pub(crate) elast: f32,
+    pub(crate) static_friction: f32,
+    pub(crate) kinetic_friction: f32,
 }
 
 impl Surface {
@@ -372,6 +426,36 @@ impl Surface {
             static_friction,
             kinetic_friction,
         }
+    }
+
+    #[inline]
+    pub fn elast(&self) -> f32 {
+        self.elast
+    }
+
+    #[inline]
+    pub fn static_friction(&self) -> f32 {
+        self.static_friction
+    }
+
+    #[inline]
+    pub fn kinetic_friction(&self) -> f32 {
+        self.kinetic_friction
+    }
+
+    #[inline]
+    pub fn set_elast(&mut self, new_elast: f32) {
+        self.elast = new_elast;
+    }
+
+    #[inline]
+    pub fn set_static_friction(&mut self, new_static_friction: f32) {
+        self.static_friction = new_static_friction;
+    }
+
+    #[inline]
+    pub fn set_kinetic_friction(&mut self, new_kinetic_friction: f32) {
+        self.kinetic_friction = new_kinetic_friction;
     }
 }
 
@@ -396,15 +480,45 @@ pub struct MaterialSpec {
 
 #[derive(Clone, Debug)]
 pub struct Material {
-    pub color: Color,
-    pub layer: usize,
-    pub show: bool,
+    pub(crate) color: Color,
+    pub(crate) layer: usize,
+    pub(crate) show: bool,
 }
 
 impl Material {
     #[inline]
     pub fn new(color: Color, layer: usize, show: bool) -> Self {
         Self { color, layer, show }
+    }
+
+    #[inline]
+    pub fn color(&self) -> Color {
+        self.color
+    }
+
+    #[inline]
+    pub fn layer(&self) -> usize {
+        self.layer
+    }
+
+    #[inline]
+    pub fn show(&self) -> bool {
+        self.show
+    }
+
+    #[inline]
+    pub fn set_color(&mut self, new_color: Color) {
+        self.color = new_color;
+    }
+
+    #[inline]
+    pub fn set_layer(&mut self, new_layer: usize) {
+        self.layer = new_layer;
+    }
+
+    #[inline]
+    pub fn set_show(&mut self, new_show: bool) {
+        self.show = new_show;
     }
 }
 
@@ -447,10 +561,10 @@ impl fmt::Display for Color {
 
 #[derive(Clone, Debug)]
 pub struct HitBox {
-    pub min_x: f32,
-    pub min_y: f32,
-    pub max_x: f32,
-    pub max_y: f32,
+    pub(crate) min_x: f32,
+    pub(crate) min_y: f32,
+    pub(crate) max_x: f32,
+    pub(crate) max_y: f32,
 }
 
 impl HitBox {
@@ -462,6 +576,46 @@ impl HitBox {
             max_x,
             max_y,
         }
+    }
+
+    #[inline]
+    pub fn min_x(&self) -> f32 {
+        self.min_x
+    }
+
+    #[inline]
+    pub fn min_y(&self) -> f32 {
+        self.min_y
+    }
+
+    #[inline]
+    pub fn max_x(&self) -> f32 {
+        self.max_x
+    }
+
+    #[inline]
+    pub fn max_y(&self) -> f32 {
+        self.max_y
+    }
+
+    #[inline]
+    pub fn set_min_x(&mut self, new_min_x: f32) {
+        self.min_x = new_min_x;
+    }
+
+    #[inline]
+    pub fn set_min_y(&mut self, new_min_y: f32) {
+        self.min_y = new_min_y;
+    }
+
+    #[inline]
+    pub fn set_max_x(&mut self, new_max_x: f32) {
+        self.max_x = new_max_x;
+    }
+
+    #[inline]
+    pub fn set_max_y(&mut self, new_max_y: f32) {
+        self.max_y = new_max_y;
     }
 
     #[inline]
@@ -532,6 +686,21 @@ pub enum Shape {
     Polygon(Polygon),
 }
 
+impl Shape {
+    #[inline]
+    pub fn validate(&self) -> Result<(), error::EngineError> {
+        match self {
+            Shape::Segment(segment) => segment.validate()?,
+            Shape::Triangle(triangle) => triangle.validate()?,
+            Shape::Rect(rect) => rect.validate()?,
+            Shape::Circle(circle) => circle.validate()?,
+            Shape::Polygon(polygon) => polygon.validate()?,
+        };
+
+        Ok(())
+    }
+}
+
 impl ToHitBox for Shape {
     fn hitbox(&self) -> HitBox {
         match self {
@@ -559,14 +728,48 @@ impl fmt::Display for Shape {
 /// notice that a and b are local positions, you may need to manually integrate them with a position
 #[derive(Clone, Deserialize, Debug)]
 pub struct Segment {
-    pub a: Vec2,
-    pub b: Vec2,
+    pub(crate) a: Vec2,
+    pub(crate) b: Vec2,
 }
 
 impl Segment {
     #[inline]
-    pub fn new(a: Vec2, b: Vec2) -> Self {
-        Self { a, b }
+    pub fn new(a: Vec2, b: Vec2) -> Result<Self, error::GeometryError> {
+        let segment = Self { a, b };
+
+        segment.validate()?;
+
+        Ok(segment)
+    }
+
+    #[inline]
+    pub fn validate(&self) -> Result<(), error::GeometryError> {
+        // check duplicates vertices
+        if self.a.square_dist(self.b) < EPS_SQR {
+            return Err(error::GeometryError::DuplicateVertices);
+        };
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn a(&self) -> Vec2 {
+        self.a
+    }
+
+    #[inline]
+    pub fn b(&self) -> Vec2 {
+        self.b
+    }
+
+    #[inline]
+    pub fn set_a(&mut self, new_a: Vec2) {
+        self.a = new_a;
+    }
+
+    #[inline]
+    pub fn set_b(&mut self, new_b: Vec2) {
+        self.b = new_b;
     }
 
     #[inline]
@@ -582,7 +785,7 @@ impl Segment {
         if delta_x.abs() <= EPS {
             // vertical line
             return None;
-        }
+        };
 
         let m = delta_y / delta_x;
         let q = self.a.y - m * self.a.x;
@@ -603,12 +806,17 @@ impl Segment {
         if delta_x.abs() <= EPS {
             // vertical line
             return Some(self.a.x);
-        }
+        };
+
+        if delta_y.abs() <= EPS {
+            // horizontal line
+            return None;
+        };
 
         let m = delta_y / delta_x;
         let q = self.a.y - m * self.a.x;
 
-        Some((y - q) / m)
+        Some((y - q) / m) // m should never be 0 since delta_y is never 0
     }
 }
 
@@ -743,15 +951,62 @@ impl fmt::Display for Segment {
 /// notice that a, b and c are local positions, you may need to manually integrate them with a position
 #[derive(Clone, Deserialize, Debug)]
 pub struct Triangle {
-    pub a: Vec2,
-    pub b: Vec2,
-    pub c: Vec2,
+    pub(crate) a: Vec2,
+    pub(crate) b: Vec2,
+    pub(crate) c: Vec2,
 }
 
 impl Triangle {
     #[inline]
-    pub fn new(a: Vec2, b: Vec2, c: Vec2) -> Self {
-        Self { a, b, c }
+    pub fn new(a: Vec2, b: Vec2, c: Vec2) -> Result<Self, error::GeometryError> {
+        let triangle = Self { a, b, c };
+
+        triangle.validate()?;
+
+        Ok(triangle)
+    }
+
+    #[inline]
+    pub fn validate(&self) -> Result<(), error::GeometryError> {
+        // check duplicates vertices
+        if self.a.square_dist(self.b) < EPS_SQR
+            || self.a.square_dist(self.c) < EPS_SQR
+            || self.b.square_dist(self.c) < EPS_SQR
+        {
+            return Err(error::GeometryError::DuplicateVertices);
+        };
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn a(&self) -> Vec2 {
+        self.a
+    }
+
+    #[inline]
+    pub fn b(&self) -> Vec2 {
+        self.b
+    }
+
+    #[inline]
+    pub fn c(&self) -> Vec2 {
+        self.c
+    }
+
+    #[inline]
+    pub fn set_a(&mut self, new_a: Vec2) {
+        self.a = new_a;
+    }
+
+    #[inline]
+    pub fn set_b(&mut self, new_b: Vec2) {
+        self.b = new_b;
+    }
+
+    #[inline]
+    pub fn set_c(&mut self, new_c: Vec2) {
+        self.c = new_c;
     }
 }
 
@@ -775,22 +1030,51 @@ impl fmt::Display for Triangle {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct Rect {
-    pub width: f32,
-    pub height: f32,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
 }
 
 impl Rect {
     #[inline]
     pub fn new(width: f32, height: f32) -> Result<Self, error::MathError> {
-        if width <= 0.0 {
+        let rect = Self { width, height };
+
+        rect.validate()?;
+
+        Ok(rect)
+    }
+
+    #[inline]
+    pub fn validate(&self) -> Result<(), error::MathError> {
+        if self.width <= 0.0 {
             return Err(error::MathError::NonPositive("width"));
         }
 
-        if height <= 0.0 {
+        if self.height <= 0.0 {
             return Err(error::MathError::NonPositive("height"));
         }
 
-        Ok(Self { width, height })
+        Ok(())
+    }
+
+    #[inline]
+    pub fn width(&self) -> f32 {
+        self.width
+    }
+
+    #[inline]
+    pub fn height(&self) -> f32 {
+        self.height
+    }
+
+    #[inline]
+    pub fn set_width(&mut self, new_width: f32) {
+        self.width = new_width;
+    }
+
+    #[inline]
+    pub fn set_height(&mut self, new_height: f32) {
+        self.height = new_height;
     }
 }
 
@@ -809,17 +1093,36 @@ impl fmt::Display for Rect {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct Circle {
-    pub radius: f32,
+    pub(crate) radius: f32,
 }
 
 impl Circle {
     #[inline]
     pub fn new(radius: f32) -> Result<Self, error::MathError> {
-        if radius <= 0.0 {
+        let circle = Self { radius };
+
+        circle.validate()?;
+
+        Ok(circle)
+    }
+
+    #[inline]
+    pub fn validate(&self) -> Result<(), error::MathError> {
+        if self.radius <= 0.0 {
             return Err(error::MathError::NonPositive("radius"));
         }
 
-        Ok(Self { radius })
+        Ok(())
+    }
+
+    #[inline]
+    pub fn radius(&self) -> f32 {
+        self.radius
+    }
+
+    #[inline]
+    pub fn set_radius(&mut self, new_radius: f32) {
+        self.radius = new_radius;
     }
 }
 
@@ -841,7 +1144,7 @@ impl fmt::Display for Circle {
 /// notice that vertices are local positions, you may need to manually integrate them with a position
 #[derive(Clone, Deserialize, Debug)]
 pub struct Polygon {
-    pub verts: Vec<Vec2>,
+    pub(crate) verts: Vec<Vec2>,
 }
 
 impl Polygon {
@@ -864,10 +1167,9 @@ impl Polygon {
         }
 
         // check duplicates vertices
-        // this uses squares instead of circles (as in square distance) for performance
         for i in 0..verts_len {
             for j in (i + 1)..verts_len {
-                if (self.verts[i].x - self.verts[j].x).abs() < EPS && (self.verts[i].y - self.verts[j].y).abs() < EPS {
+                if self.verts[i].square_dist(self.verts[j]) < EPS_SQR {
                     return Err(error::GeometryError::DuplicateVertices);
                 }
             }
@@ -878,16 +1180,29 @@ impl Polygon {
             let i1 = (i + 1) % verts_len; // use modulo indexing to restart when the end is reached
             let i2 = (i + 2) % verts_len;
 
-            let a = self.verts[i1].sub(self.verts[i]);
-            let b = self.verts[i2].sub(self.verts[i1]);
-            let cross = a.cross(b);
+            let area = self.verts[i].signed_area(self.verts[i1], self.verts[i2]);
 
-            if cross <= EPS {
+            if area >= -EPS {
                 return Err(error::GeometryError::NotConvex);
             }
         }
 
         Ok(())
+    }
+
+    #[inline]
+    pub fn verts(&self) -> &Vec<Vec2> {
+        &self.verts
+    }
+
+    #[inline]
+    pub fn verts_mut(&mut self) -> &mut Vec<Vec2> {
+        &mut self.verts
+    }
+
+    #[inline]
+    pub fn set_verts(&mut self, new_verts: Vec<Vec2>) {
+        self.verts = new_verts;
     }
 }
 

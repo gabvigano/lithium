@@ -17,6 +17,9 @@ pub fn load_static_map(
         let entity = entity_manager.create();
         entities.push(entity);
 
+        // check if shape is valid
+        obj.shape.validate()?;
+
         world.transform.insert(entity, obj.transform.into())?;
         world.surface.insert(entity, obj.surface.into())?;
         world.shape.insert(entity, obj.shape)?;
@@ -38,6 +41,9 @@ pub fn load_dynamic_map(
     for obj in map {
         let entity = entity_manager.create();
         entities.push(entity);
+
+        // check if shape is valid
+        obj.shape.validate()?;
 
         world.transform.insert(entity, obj.transform.into())?;
         world.rigid_body.insert(entity, obj.rigid_body.try_into()?)?;

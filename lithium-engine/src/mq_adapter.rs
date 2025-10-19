@@ -30,10 +30,10 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
 
     for (material, entity) in pairs {
         if material.show {
-            let Ok(&components::Transform { pos, .. }) = world.transform.get(entity) else {
+            let Some(&components::Transform { pos, .. }) = world.transform.get(entity) else {
                 continue;
             };
-            let Ok(shape) = world.shape.get(entity) else {
+            let Some(shape) = world.shape.get(entity) else {
                 continue;
             };
 

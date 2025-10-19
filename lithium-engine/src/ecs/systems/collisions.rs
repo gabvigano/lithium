@@ -249,20 +249,16 @@ pub fn convex_hull(mut verts: Vec<components::Vec2>) -> Result<components::Polyg
         return Err(error::GeometryError::TooFewVertices(verts.len()));
     }
 
-    // sort by x and, if x is the same, by y
-    verts.sort_by(|a, b| {
-        a.x.partial_cmp(&b.x)
-            .expect("impossible comparison (maybe nan)")
-            .then(a.y.partial_cmp(&b.y).expect("impossible comparison (maybe nan)"))
-    });
+    // sort by x and, if x is the same, by y (reversed because low y = top and high y = bottom)
+    verts.sort_unstable_by(|a, b| a.x.total_cmp(&b.x).then_with(|| b.y.total_cmp(&a.y)));
 
-    fn walk<'a>(verts: impl IntoIterator<Item = &'a components::Vec2>) -> Vec<components::Vec2> {
-        let mut boundary: Vec<components::Vec2> = Vec::new();
+    fn walk(verts: &[components::Vec2]) -> Vec<components::Vec2> {
+        let mut boundary: Vec<components::Vec2> = Vec::with_capacity(verts.len());
 
         for &v in verts {
             while boundary.len() >= 2 {
                 let b = boundary.len();
-                if (boundary[b - 2]).signed_area(boundary[b - 1], v) <= 0.0 {
+                if (boundary[b - 2]).signed_area(boundary[b - 1], v) >= 0.0 {
                     boundary.pop();
                 } else {
                     break;
@@ -277,8 +273,10 @@ pub fn convex_hull(mut verts: Vec<components::Vec2>) -> Result<components::Polyg
     // compute bottom boundary (counterclockwise from leftmost to rightmost)
     let mut bottom_boundary = walk(&verts);
 
+    verts.reverse();
+
     // compute top boundary (counterclockwise from rightmost to leftmost)
-    let mut top_boundary = walk(verts.iter().rev());
+    let mut top_boundary = walk(&verts);
 
     // drop lasts to avoid duplication
     bottom_boundary.pop();
@@ -400,13 +398,13 @@ fn compute_reaction(
     if normal.x.abs() <= 0.2 {
         // one is above the other
         if normal.y > 0.0
-            && let Ok(rigid_body) = world.rigid_body.get_mut(entity_1)
+            && let Some(rigid_body) = world.rigid_body.get_mut(entity_1)
         {
             rigid_body.rest = true;
         }
 
         if normal.y < 0.0
-            && let Ok(rigid_body) = world.rigid_body.get_mut(entity_2)
+            && let Some(rigid_body) = world.rigid_body.get_mut(entity_2)
         {
             rigid_body.rest = true;
         }
@@ -427,7 +425,7 @@ fn compute_reaction(
     };
 
     let (vel_2, inv_mass_2) = {
-        if let Ok(rigid_body) = world.rigid_body.get(entity_2) {
+        if let Some(rigid_body) = world.rigid_body.get(entity_2) {
             (rigid_body.vel, rigid_body.inv_mass())
         } else {
             (components::Vec2::new(0.0, 0.0), 0.0)
@@ -513,7 +511,7 @@ fn compute_reaction(
     // recompute vel_1
     let vel_1 = rigid_body_1.vel;
 
-    let vel_2 = if let Ok(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
+    let vel_2 = if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
         rigid_body_2.vel.add_mut(impulse_vector.scale(inv_mass_2)); // here we add the delta_vel (see above why)
 
         // round y velocity to 0 for object 2
@@ -561,7 +559,7 @@ fn compute_reaction(
     let rigid_body_1 = world.rigid_body.get_mut(entity_1).expect("missing rigid_body");
     rigid_body_1.vel.sub_mut(friction_impulse_vector.scale(inv_mass_1));
 
-    if let Ok(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
+    if let Some(rigid_body_2) = world.rigid_body.get_mut(entity_2) {
         rigid_body_2.vel.add_mut(friction_impulse_vector.scale(inv_mass_2));
     }
 }
@@ -571,7 +569,7 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
     let mut solved = true;
 
     // checks entity_1 has all the components necessary for being a dynamic object and extracts its position
-    let (Ok(&components::Transform { pos: pos_1, .. }), Ok(_), Ok(_), Ok(_)) = (
+    let (Some(&components::Transform { pos: pos_1, .. }), Some(_), Some(_), Some(_)) = (
         world.transform.get(entity_1),
         world.rigid_body.get(entity_1),
         world.surface.get(entity_1),
@@ -588,7 +586,7 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
         };
 
         // checks entity_2 has all the components necessary for being at least a static object and extracts its position and shape
-        let (Ok(&components::Transform { pos: pos_2, .. }), Ok(_), Ok(shape_2)) = (
+        let (Some(&components::Transform { pos: pos_2, .. }), Some(_), Some(shape_2)) = (
             world.transform.get(entity_2),
             world.surface.get(entity_2),
             world.shape.get(entity_2),
@@ -610,7 +608,7 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             );
             let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(vel_1), shape_1); // we are also recomputing the swept_shape at every iteration since its velocity may have changed
 
-            let swept_shape_2 = if vel_2.is_err() {
+            let swept_shape_2 = if vel_2.is_none() {
                 // it is static, generate fixed swept_shape
                 generate_swept_shape(pos_2, pos_2, shape_2)
             } else {

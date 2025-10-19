@@ -39,7 +39,7 @@ async fn main() {
 
     // create player
     let player = entity_manager.create();
-    let player_spawn = components::Vec2::new(150.0, 100.0);
+    let player_spawn = components::Vec2::new(625.0, 100.0);
     world
         .transform
         .insert(
@@ -94,7 +94,7 @@ async fn main() {
         physics::reset_force(&mut world, GRAVITY);
 
         // handle user inputs
-        if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).unwrap().rest {
+        if prelude::is_key_down(prelude::KeyCode::W) && world.rigid_body.get(player).unwrap().rest() {
             physics::apply_axis_vel(&mut world, player, -12.0, Some(-12.0), components::Axis::Vertical).unwrap();
             // physics::apply_axis_force(&mut world, player, -5.0, None, components::Axis::Vertical);
         }
@@ -126,7 +126,7 @@ async fn main() {
         collisions::resolve_collisions(&mut world, true, 5);
         physics::update_pos(&mut world);
 
-        camera.update(world.transform.get(player).expect("missing transform").pos);
+        camera.update(world.transform.get(player).expect("missing transform").pos());
 
         // render entities
         mq_adapter::render(&mut world, &camera);

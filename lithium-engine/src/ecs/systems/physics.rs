@@ -1,6 +1,5 @@
 use crate::{
     ecs::{components, entities},
-    error,
     world::World,
 };
 
@@ -38,21 +37,21 @@ pub fn reset_pos(world: &mut World) {
 #[inline]
 pub fn reset_vel(world: &mut World, new_vel: components::Vec2) {
     for (_, rigid_body) in world.rigid_body.iter_mut() {
-        rigid_body.reset_vel(new_vel);
+        rigid_body.set_vel(new_vel);
     }
 }
 
 #[inline]
 pub fn reset_force(world: &mut World, new_force: components::Vec2) {
     for (_, rigid_body) in world.rigid_body.iter_mut() {
-        rigid_body.reset_force(new_force.scale(rigid_body.mass()));
+        rigid_body.set_force(new_force.scale(rigid_body.mass()));
     }
 }
 
 #[inline]
 pub fn update_pos(world: &mut World) {
     for (entity, transform) in world.transform.iter_mut() {
-        if let Ok(components::RigidBody { vel, .. }) = world.rigid_body.get(entity) {
+        if let Some(components::RigidBody { vel, .. }) = world.rigid_body.get(entity) {
             transform.pos.add_mut(*vel);
         }
     }
@@ -71,7 +70,7 @@ pub fn apply_axis_vel(
     new_vel: f32,
     limit: Option<f32>,
     axis: components::Axis,
-) -> Result<(), error::ComponentError> {
+) -> Option<()> {
     let rigid_body = world.rigid_body.get_mut(entity)?;
 
     match axis {
@@ -83,7 +82,7 @@ pub fn apply_axis_vel(
         }
     }
 
-    Ok(())
+    Some(())
 }
 
 pub fn apply_vel(
@@ -91,13 +90,13 @@ pub fn apply_vel(
     entity: entities::Entity,
     new_vel: components::Vec2,
     limit: Option<f32>,
-) -> Result<(), error::ComponentError> {
+) -> Option<()> {
     let rigid_body = world.rigid_body.get_mut(entity)?;
 
     rigid_body.vel.x = clamp_toward_zero(rigid_body.vel.x + new_vel.x, limit);
     rigid_body.vel.y = clamp_toward_zero(rigid_body.vel.y + new_vel.y, limit);
 
-    Ok(())
+    Some(())
 }
 
 pub fn apply_axis_force(
@@ -106,7 +105,7 @@ pub fn apply_axis_force(
     new_force: f32,
     limit: Option<f32>,
     axis: components::Axis,
-) -> Result<(), error::ComponentError> {
+) -> Option<()> {
     let rigid_body = world.rigid_body.get_mut(entity)?;
 
     match axis {
@@ -118,17 +117,13 @@ pub fn apply_axis_force(
         }
     }
 
-    Ok(())
+    Some(())
 }
 
-pub fn apply_force(
-    world: &mut World,
-    entity: entities::Entity,
-    new_force: components::Vec2,
-) -> Result<(), error::ComponentError> {
+pub fn apply_force(world: &mut World, entity: entities::Entity, new_force: components::Vec2) -> Option<()> {
     let rigid_body = world.rigid_body.get_mut(entity)?;
 
     rigid_body.force.add_mut(new_force);
 
-    Ok(())
+    Some(())
 }
