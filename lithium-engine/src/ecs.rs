@@ -1,4 +1,4 @@
-use crate::error;
+use crate::core::error;
 
 pub mod components;
 pub mod entities;

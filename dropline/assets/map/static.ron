@@ -1,36 +1,36 @@
 [
     (
-        transform: (spawn: (x: 0.0, y: 500.0), angle: (radians: 0.0)),
+        transform: (pos: (x: 0.0, y: 500.0), rot: (x: 1.0, y: 0.0)),
         surface: (elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15),
         shape: Rect((width: 2000.0, height: 25.0)),
         material: (color: (r: 255, g: 255, b: 255, a: 255), layer: 0, show: true),
     ),
     (
-        transform: (spawn: (x: -300.0, y: 400.0), angle: (radians: 0.0)),
+        transform: (pos: (x: -300.0, y: 400.0), rot: (x: 1.0, y: 0.0)),
         surface: (elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15),
         shape: Rect((width: 150.0, height: 50.0)),
         material: (color: (r: 155, g: 155, b: 255, a: 255), layer: 0, show: true),
     ),
     (
-        transform: (spawn: (x: 75.0, y: 175.0), angle: (radians: 0.0)),
+        transform: (pos: (x: 75.0, y: 175.0), rot: (x: 1.0, y: 0.0)),
         surface: (elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15),
         shape: Rect((width: 150.0, height: 50.0)),
         material: (color: (r: 155, g: 155, b: 255, a: 255), layer: 0, show: true),
     ),
     (
-        transform: (spawn: (x: 400.0, y: 250.0), angle: (radians: 0.0)),
+        transform: (pos: (x: 400.0, y: 250.0), rot: (x: 1.0, y: 0.0)),
         surface: (elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15),
         shape: Rect((width: 150.0, height: 50.0)),
         material: (color: (r: 255, g: 155, b: 155, a: 255), layer: 0, show: true),
     ),
     (
-        transform: (spawn: (x: 200.0, y: 350.0), angle: (radians: 0.0)),
+        transform: (pos: (x: 200.0, y: 350.0), rot: (x: 1.0, y: 0.0)),
         surface: (elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15),
         shape: Rect((width: 150.0, height: 50.0)),
         material: (color: (r: 155, g: 255, b: 155, a: 255), layer: 0, show: true),
     ),
     (
-        transform: (spawn: (x: 700.0, y: 300.0), angle: (radians: 0.0)),
+        transform: (pos: (x: 700.0, y: 300.0), rot: (x: 1.0, y: 0.0)),
         surface: (elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15),
         shape: Rect((width: 300.0, height: 50.0)),
         material: (color: (r: 155, g: 255, b: 155, a: 255), layer: 0, show: true),

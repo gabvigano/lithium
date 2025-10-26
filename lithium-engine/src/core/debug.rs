@@ -1,4 +1,4 @@
-use crate::{ecs::components, scene};
+use crate::{math, renderer::scene};
 use macroquad::prelude;
 
 pub fn display(msgs: &[String]) {
@@ -11,8 +11,8 @@ pub fn display(msgs: &[String]) {
 }
 
 pub fn render_vector(
-    mut start_pos: components::Vec2,
-    mut vec: components::Vec2,
+    mut start_pos: math::Vec2,
+    mut vec: math::Vec2,
     scale: Option<f32>,
     camera: &scene::Camera,
     color: prelude::Color,

@@ -1,11 +1,12 @@
-use crate::{ecs::components, scene, world};
-use macroquad::{math, prelude};
+use crate::{core::world, ecs::components, math, renderer::scene};
+
+use macroquad::{math as mq_math, prelude as mq_prelude};
 
 #[inline]
-pub fn color_to_mq(color: components::Color) -> prelude::Color {
-    let components::Color { r, g, b, a } = color;
+pub fn color_to_mq(color: math::Color) -> mq_prelude::Color {
+    let math::Color { r, g, b, a } = color;
 
-    prelude::Color {
+    mq_prelude::Color {
         r: (r as f32) / 255.0,
         g: (g as f32) / 255.0,
         b: (b as f32) / 255.0,
@@ -26,7 +27,7 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
     // sort by layer
     pairs.sort_by_key(|(m, _)| m.layer);
 
-    let components::Vec2 { x: cam_x, y: cam_y } = camera.pos();
+    let math::Vec2 { x: cam_x, y: cam_y } = camera.pos();
 
     for (material, entity) in pairs {
         if material.show {
@@ -38,7 +39,7 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
             };
 
             match shape {
-                components::Shape::Segment(segment) => prelude::draw_line(
+                math::Shape::Segment(segment) => mq_prelude::draw_line(
                     pos.x + segment.a.x - cam_x,
                     pos.y + segment.a.y - cam_y,
                     pos.x + segment.b.x - cam_x,
@@ -47,31 +48,31 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
                     color_to_mq(material.color),
                 ),
 
-                components::Shape::Triangle(triangle) => prelude::draw_triangle(
-                    math::Vec2::new(pos.x + triangle.a.x - cam_x, pos.y + triangle.a.y - cam_y),
-                    math::Vec2::new(pos.x + triangle.b.x - cam_x, pos.y + triangle.b.y - cam_y),
-                    math::Vec2::new(pos.x + triangle.c.x - cam_x, pos.y + triangle.c.y - cam_y),
+                math::Shape::Triangle(triangle) => mq_prelude::draw_triangle(
+                    mq_math::Vec2::new(pos.x + triangle.a.x - cam_x, pos.y + triangle.a.y - cam_y),
+                    mq_math::Vec2::new(pos.x + triangle.b.x - cam_x, pos.y + triangle.b.y - cam_y),
+                    mq_math::Vec2::new(pos.x + triangle.c.x - cam_x, pos.y + triangle.c.y - cam_y),
                     color_to_mq(material.color),
                 ),
-                components::Shape::Rect(rect) => prelude::draw_rectangle(
+                math::Shape::Rect(rect) => mq_prelude::draw_rectangle(
                     pos.x - cam_x,
                     pos.y - cam_y,
                     rect.width,
                     rect.height,
                     color_to_mq(material.color),
                 ),
-                components::Shape::Circle(circle) => prelude::draw_circle(
+                math::Shape::Circle(circle) => mq_prelude::draw_circle(
                     pos.x + circle.radius - cam_x, // sum radius because macroquad use centre for circles instead of top left
                     pos.y + circle.radius - cam_y,
                     circle.radius,
                     color_to_mq(material.color),
                 ),
-                components::Shape::Polygon(polygon) => {
+                math::Shape::Polygon(polygon) => {
                     for i in 0..(polygon.verts.len() - 1) {
-                        prelude::draw_triangle(
-                            math::Vec2::new(pos.x + polygon.verts[0].x - cam_x, pos.y + polygon.verts[0].y - cam_y),
-                            math::Vec2::new(pos.x + polygon.verts[i].x - cam_x, pos.y + polygon.verts[i].y - cam_y),
-                            math::Vec2::new(
+                        mq_prelude::draw_triangle(
+                            mq_math::Vec2::new(pos.x + polygon.verts[0].x - cam_x, pos.y + polygon.verts[0].y - cam_y),
+                            mq_math::Vec2::new(pos.x + polygon.verts[i].x - cam_x, pos.y + polygon.verts[i].y - cam_y),
+                            mq_math::Vec2::new(
                                 pos.x + polygon.verts[i + 1].x - cam_x,
                                 pos.y + polygon.verts[i + 1].y - cam_y,
                             ),

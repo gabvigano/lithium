@@ -35,6 +35,7 @@
 [x]     - in collisions, if we keep the iteration instead of the recursion we can early return when no more collisions are detected
 [x] better exception handling with Result instead of panic
 [ ] refactor code (rename variables and functions, write comments and docstring)
+[x] organize files structure
 
 # rendering
 [x] render more complex objects (segment, triangle, polygon)
