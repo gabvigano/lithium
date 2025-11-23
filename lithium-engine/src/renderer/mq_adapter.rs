@@ -1,4 +1,9 @@
-use crate::{core::world, ecs::components, math, renderer::scene};
+use crate::{
+    core::world,
+    ecs::components,
+    math::{self, algebra},
+    renderer::scene,
+};
 
 use macroquad::{math as mq_math, prelude as mq_prelude};
 
@@ -38,47 +43,116 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
                 continue;
             };
 
-            match shape {
-                math::Shape::Segment(segment) => mq_prelude::draw_line(
-                    pos.x + segment.a.x - cam_x,
-                    pos.y + segment.a.y - cam_y,
-                    pos.x + segment.b.x - cam_x,
-                    pos.y + segment.b.y - cam_y,
-                    1.0,
-                    color_to_mq(material.color),
-                ),
+            let color = color_to_mq(material.color);
 
-                math::Shape::Triangle(triangle) => mq_prelude::draw_triangle(
-                    mq_math::Vec2::new(pos.x + triangle.a.x - cam_x, pos.y + triangle.a.y - cam_y),
-                    mq_math::Vec2::new(pos.x + triangle.b.x - cam_x, pos.y + triangle.b.y - cam_y),
-                    mq_math::Vec2::new(pos.x + triangle.c.x - cam_x, pos.y + triangle.c.y - cam_y),
-                    color_to_mq(material.color),
-                ),
-                math::Shape::Rect(rect) => mq_prelude::draw_rectangle(
-                    pos.x - cam_x,
-                    pos.y - cam_y,
-                    rect.width,
-                    rect.height,
-                    color_to_mq(material.color),
-                ),
-                math::Shape::Circle(circle) => mq_prelude::draw_circle(
-                    pos.x + circle.radius - cam_x, // sum radius because macroquad use centre for circles instead of top left
-                    pos.y + circle.radius - cam_y,
-                    circle.radius,
-                    color_to_mq(material.color),
-                ),
-                math::Shape::Polygon(polygon) => {
-                    for i in 0..(polygon.verts.len() - 1) {
-                        mq_prelude::draw_triangle(
-                            mq_math::Vec2::new(pos.x + polygon.verts[0].x - cam_x, pos.y + polygon.verts[0].y - cam_y),
-                            mq_math::Vec2::new(pos.x + polygon.verts[i].x - cam_x, pos.y + polygon.verts[i].y - cam_y),
-                            mq_math::Vec2::new(
-                                pos.x + polygon.verts[i + 1].x - cam_x,
-                                pos.y + polygon.verts[i + 1].y - cam_y,
-                            ),
-                            color_to_mq(material.color),
+            let rot_mat = world.rotation_matrix.get(entity);
+            let rot_mat_is_none = rot_mat.is_none();
+            let rot_mat = if rot_mat_is_none {
+                &algebra::IDENTITY_MAT2X3
+            } else {
+                &rot_mat.unwrap().curr
+            };
+
+            match shape {
+                math::Shape::Segment(segment) => {
+                    let (a, b) = if rot_mat_is_none {
+                        (pos.add(segment.a), pos.add(segment.b))
+                    } else {
+                        (
+                            pos.add(rot_mat.pre_mul_vec2(segment.a)),
+                            pos.add(rot_mat.pre_mul_vec2(segment.b)),
                         )
+                    };
+
+                    mq_prelude::draw_line(a.x - cam_x, a.y - cam_y, b.x - cam_x, b.y - cam_y, 1.0, color);
+                }
+                math::Shape::Triangle(triangle) => {
+                    let (a, b, c) = if rot_mat_is_none {
+                        (pos.add(triangle.a), pos.add(triangle.b), pos.add(triangle.c))
+                    } else {
+                        (
+                            pos.add(rot_mat.pre_mul_vec2(triangle.a)),
+                            pos.add(rot_mat.pre_mul_vec2(triangle.b)),
+                            pos.add(rot_mat.pre_mul_vec2(triangle.c)),
+                        )
+                    };
+
+                    mq_prelude::draw_triangle(
+                        mq_math::Vec2::new(a.x - cam_x, a.y - cam_y),
+                        mq_math::Vec2::new(b.x - cam_x, b.y - cam_y),
+                        mq_math::Vec2::new(c.x - cam_x, c.y - cam_y),
+                        color,
+                    )
+                }
+                math::Shape::Quad(quad) => {
+                    let (a, b, c, d) = if rot_mat_is_none {
+                        (pos.add(quad.a), pos.add(quad.b), pos.add(quad.c), pos.add(quad.d))
+                    } else {
+                        (
+                            pos.add(rot_mat.pre_mul_vec2(quad.a)),
+                            pos.add(rot_mat.pre_mul_vec2(quad.b)),
+                            pos.add(rot_mat.pre_mul_vec2(quad.c)),
+                            pos.add(rot_mat.pre_mul_vec2(quad.d)),
+                        )
+                    };
+
+                    mq_prelude::draw_triangle(
+                        mq_math::Vec2::new(a.x - cam_x, a.y - cam_y),
+                        mq_math::Vec2::new(b.x - cam_x, b.y - cam_y),
+                        mq_math::Vec2::new(c.x - cam_x, c.y - cam_y),
+                        color,
+                    );
+
+                    mq_prelude::draw_triangle(
+                        mq_math::Vec2::new(a.x - cam_x, a.y - cam_y),
+                        mq_math::Vec2::new(c.x - cam_x, c.y - cam_y),
+                        mq_math::Vec2::new(d.x - cam_x, d.y - cam_y),
+                        color,
+                    );
+                }
+                math::Shape::Polygon(polygon) => {
+                    if rot_mat_is_none {
+                        let v0 = pos.add(polygon.verts[0]);
+                        let mut vi = pos.add(polygon.verts[1]);
+
+                        for i in 1..(polygon.verts.len() - 1) {
+                            let vi1 = pos.add(polygon.verts[i + 1]);
+
+                            mq_prelude::draw_triangle(
+                                mq_math::Vec2::new(v0.x - cam_x, v0.y - cam_y),
+                                mq_math::Vec2::new(vi.x - cam_x, vi.y - cam_y),
+                                mq_math::Vec2::new(vi1.x - cam_x, vi1.y - cam_y),
+                                color,
+                            );
+
+                            vi = vi1;
+                        }
+                    } else {
+                        let v0 = pos.add(rot_mat.pre_mul_vec2(polygon.verts[0]));
+                        let mut vi = pos.add(rot_mat.pre_mul_vec2(polygon.verts[1]));
+
+                        for i in 1..(polygon.verts.len() - 1) {
+                            let vi1 = pos.add(rot_mat.pre_mul_vec2(polygon.verts[i + 1]));
+
+                            mq_prelude::draw_triangle(
+                                mq_math::Vec2::new(v0.x - cam_x, v0.y - cam_y),
+                                mq_math::Vec2::new(vi.x - cam_x, vi.y - cam_y),
+                                mq_math::Vec2::new(vi1.x - cam_x, vi1.y - cam_y),
+                                color,
+                            );
+
+                            vi = vi1;
+                        }
                     }
+                }
+                math::Shape::Circle(_) => {
+                    unimplemented!();
+                    // mq_prelude::draw_circle(
+                    //     pos.x + circle.radius - cam_x, // sum radius because macroquad use centre for circles instead of top left
+                    //     pos.y + circle.radius - cam_y,
+                    //     circle.radius,
+                    //     color,
+                    // )
                 }
             }
         }

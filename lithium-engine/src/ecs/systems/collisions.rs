@@ -1,7 +1,7 @@
 use crate::{
     core::{error, world::World},
     ecs::{components, entities},
-    math::{self, ToHitBox},
+    math::{self, ApplyMatrix, ToHitBox},
     math::{EPS, EPS_SQR},
 };
 
@@ -28,96 +28,182 @@ fn check_sat(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape)
         }
 
         match swept_shape {
-            math::SweptShape::Unmoved { shape, pos: _ } => match shape {
-                math::Shape::Segment(segment) => {
-                    let edge = segment.b.sub(segment.a);
-                    if edge.square_mag() > EPS_SQR {
-                        axes.push(edge.perp_ccw().norm())
-                    }
-                }
+            math::SweptShape::Unchanged { shape, pos: _, rot_mat } => {
+                let rot_mat_is_none = rot_mat.is_none();
+                let rot_mat = rot_mat.as_ref().unwrap_or(&math::IDENTITY_MAT2X3);
 
-                math::Shape::Triangle(triangle) => {
-                    let edges = [
-                        triangle.b.sub(triangle.a),
-                        triangle.c.sub(triangle.b),
-                        triangle.a.sub(triangle.c),
-                    ];
-                    for edge in edges {
+                match shape {
+                    math::Shape::Segment(segment) => {
+                        let segment = if rot_mat_is_none {
+                            segment
+                        } else {
+                            &segment.apply_matrix(rot_mat).expect("invalid geometry")
+                        };
+
+                        let edge = segment.b.sub(segment.a);
                         if edge.square_mag() > EPS_SQR {
-                            axes.push(edge.perp_ccw().norm());
+                            axes.push(edge.perp_ccw().norm())
                         }
                     }
+                    math::Shape::Triangle(triangle) => {
+                        let triangle = if rot_mat_is_none {
+                            triangle
+                        } else {
+                            &triangle.apply_matrix(rot_mat).expect("invalid geometry")
+                        };
+
+                        let edges = [
+                            triangle.b.sub(triangle.a),
+                            triangle.c.sub(triangle.b),
+                            triangle.a.sub(triangle.c),
+                        ];
+                        for edge in edges {
+                            if edge.square_mag() > EPS_SQR {
+                                axes.push(edge.perp_ccw().norm());
+                            }
+                        }
+                    }
+                    math::Shape::Quad(quad) => {
+                        let quad = if rot_mat_is_none {
+                            quad
+                        } else {
+                            &quad.apply_matrix(rot_mat).expect("invalid geometry")
+                        };
+
+                        let edges = [
+                            quad.b.sub(quad.a),
+                            quad.c.sub(quad.b),
+                            quad.d.sub(quad.c),
+                            quad.a.sub(quad.d),
+                        ];
+                        for edge in edges {
+                            if edge.square_mag() > EPS_SQR {
+                                axes.push(edge.perp_ccw().norm());
+                            }
+                        }
+                    }
+                    math::Shape::Polygon(polygon) => {
+                        let polygon = if rot_mat_is_none {
+                            polygon
+                        } else {
+                            &polygon.apply_matrix(rot_mat).expect("invalid geometry")
+                        };
+
+                        add_polygon_axes(polygon, axes)
+                    }
+                    math::Shape::Circle(_) => unimplemented!(),
                 }
-                math::Shape::Rect(_) => {
-                    axes.push(math::Vec2::new(1.0, 0.0)); // add horizontal
-                    axes.push(math::Vec2::new(0.0, 1.0)); // add vertical
-                }
-                math::Shape::Circle(_) => unimplemented!(),
-                math::Shape::Polygon(polygon) => add_polygon_axes(polygon, axes),
-            },
-            math::SweptShape::AxisRect { swept: _, pos: _ } => {
-                axes.push(math::Vec2::new(1.0, 0.0)); // add horizontal
-                axes.push(math::Vec2::new(0.0, 1.0)); // add vertical
             }
-            math::SweptShape::Moved { swept } => add_polygon_axes(swept, axes),
+            math::SweptShape::Changed { swept } => add_polygon_axes(swept, axes),
+            // math::SweptShape::AxisRect { swept: _, pos: _ } => {
+            //     axes.push(math::Vec2::new(1.0, 0.0)); // add horizontal
+            //     axes.push(math::Vec2::new(0.0, 1.0)); // add vertical
+            // }
         }
     }
 
     fn project_shape(swept_shape: &math::SweptShape, axis: math::Vec2) -> (f32, f32) {
-        fn project_rect(rect: &math::Rect, pos: math::Vec2, axis: math::Vec2) -> (f32, f32) {
-            let a_proj = pos.dot(axis);
-            let b_proj = pos.add_scalar(rect.width, 0.0).dot(axis);
-            let c_proj = pos.add_scalar(0.0, rect.height).dot(axis);
-            let d_proj = pos.add_scalar(rect.width, rect.height).dot(axis);
+        // fn project_rect(rect: &math::Rect, pos: math::Vec2, axis: math::Vec2) -> (f32, f32) {
+        //     let a_proj = pos.dot(axis);
+        //     let b_proj = pos.add_scalar(rect.width, 0.0).dot(axis);
+        //     let c_proj = pos.add_scalar(0.0, rect.height).dot(axis);
+        //     let d_proj = pos.add_scalar(rect.width, rect.height).dot(axis);
 
-            (
-                a_proj.min(b_proj.min(c_proj.min(d_proj))),
-                a_proj.max(b_proj.max(c_proj.max(d_proj))),
-            )
-        }
+        //     (
+        //         a_proj.min(b_proj.min(c_proj.min(d_proj))),
+        //         a_proj.max(b_proj.max(c_proj.max(d_proj))),
+        //     )
+        // }
 
         match swept_shape {
-            math::SweptShape::Unmoved { shape, pos } => {
-                // unmoved shapes have local positions
+            // math::SweptShape::AxisRect { swept, pos } => project_rect(swept, *pos, axis), // axis-rect has local positions
+            math::SweptShape::Unchanged { shape, pos, rot_mat } => {
+                // unchanged shapes have local positions
+                let rot_mat_is_none = rot_mat.is_none();
+                let rot_mat = rot_mat.as_ref().unwrap_or(&math::IDENTITY_MAT2X3);
 
                 match shape {
                     math::Shape::Segment(segment) => {
-                        let a_proj = pos.add(segment.a).dot(axis);
-                        let b_proj = pos.add(segment.b).dot(axis);
+                        let (a_proj, b_proj) = if rot_mat_is_none {
+                            (pos.add(segment.a).dot(axis), pos.add(segment.b).dot(axis))
+                        } else {
+                            (
+                                pos.add(rot_mat.pre_mul_vec2(segment.a)).dot(axis),
+                                pos.add(rot_mat.pre_mul_vec2(segment.b)).dot(axis),
+                            )
+                        };
 
                         (a_proj.min(b_proj), a_proj.max(b_proj))
                     }
                     math::Shape::Triangle(triangle) => {
-                        let a_proj = pos.add(triangle.a).dot(axis);
-                        let b_proj = pos.add(triangle.b).dot(axis);
-                        let c_proj = pos.add(triangle.c).dot(axis);
+                        let (a_proj, b_proj, c_proj) = if rot_mat_is_none {
+                            (
+                                pos.add(triangle.a).dot(axis),
+                                pos.add(triangle.b).dot(axis),
+                                pos.add(triangle.c).dot(axis),
+                            )
+                        } else {
+                            (
+                                pos.add(rot_mat.pre_mul_vec2(triangle.a)).dot(axis),
+                                pos.add(rot_mat.pre_mul_vec2(triangle.b)).dot(axis),
+                                pos.add(rot_mat.pre_mul_vec2(triangle.c)).dot(axis),
+                            )
+                        };
 
                         (a_proj.min(b_proj.min(c_proj)), a_proj.max(b_proj.max(c_proj)))
                     }
-                    math::Shape::Rect(rect) => project_rect(rect, *pos, axis),
-                    math::Shape::Circle(_) => unimplemented!(),
+                    math::Shape::Quad(quad) => {
+                        let (a_proj, b_proj, c_proj, d_proj) = if rot_mat_is_none {
+                            (
+                                pos.add(quad.a).dot(axis),
+                                pos.add(quad.b).dot(axis),
+                                pos.add(quad.c).dot(axis),
+                                pos.add(quad.d).dot(axis),
+                            )
+                        } else {
+                            (
+                                pos.add(rot_mat.pre_mul_vec2(quad.a)).dot(axis),
+                                pos.add(rot_mat.pre_mul_vec2(quad.b)).dot(axis),
+                                pos.add(rot_mat.pre_mul_vec2(quad.c)).dot(axis),
+                                pos.add(rot_mat.pre_mul_vec2(quad.d)).dot(axis),
+                            )
+                        };
+
+                        (
+                            a_proj.min(b_proj.min(c_proj.min(d_proj))),
+                            a_proj.max(b_proj.max(c_proj.max(d_proj))),
+                        )
+                    }
                     math::Shape::Polygon(polygon) => {
                         let mut min = f32::INFINITY;
                         let mut max = f32::NEG_INFINITY;
 
-                        for vert in &polygon.verts {
-                            let proj = pos.add(*vert).dot(axis);
-                            min = min.min(proj);
-                            max = max.max(proj);
+                        if rot_mat_is_none {
+                            for vert in &polygon.verts {
+                                let proj = pos.add(*vert).dot(axis);
+                                min = min.min(proj);
+                                max = max.max(proj);
+                            }
+                        } else {
+                            for vert in &polygon.verts {
+                                let proj = pos.add(rot_mat.pre_mul_vec2(*vert)).dot(axis);
+                                min = min.min(proj);
+                                max = max.max(proj);
+                            }
                         }
                         (min, max)
                     }
+                    math::Shape::Circle(_) => unimplemented!(),
                 }
             }
-            math::SweptShape::AxisRect { swept, pos } => project_rect(swept, *pos, axis), // axis-rect has local positions
-            math::SweptShape::Moved { swept } => {
-                // moved polygon has global positions
+            math::SweptShape::Changed { swept } => {
+                // changed polygon has global positions
 
                 let mut min = f32::INFINITY;
                 let mut max = f32::NEG_INFINITY;
 
                 for vert in &swept.verts {
-                    let proj = vert.dot(axis); // I am not reusing this code because here we don't sum position, so it is simpler like this
+                    let proj = vert.dot(axis); // I am not reusing this code because here we don't sum position and apply the rotation matrix, so it is simpler like this
                     if proj < min {
                         min = proj;
                     }
@@ -147,32 +233,81 @@ fn check_sat(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape)
 
     fn centroid(swept_shape: &math::SweptShape) -> math::Vec2 {
         match swept_shape {
-            math::SweptShape::Unmoved { shape, pos } => {
-                // unmoved shapes have local positions
+            // math::SweptShape::Unmoved { shape, pos } => {
+            //     // unmoved shapes have local positions
+
+            //     match shape {
+            //         math::Shape::Segment(segment) => pos.add(segment.a.add(segment.b).scale(0.5)),
+            //         math::Shape::Triangle(triangle) => {
+            //             pos.add(triangle.a.add(triangle.b.add(triangle.c)).scale(1.0 / 3.0))
+            //         }
+            //         math::Shape::Quad(quad) => pos.add(quad.a.add(quad.b.add(quad.c.add(quad.d))).scale(0.25)),
+            //         math::Shape::Polygon(polygon) => {
+            //             let mut sum = math::Vec2::new(0.0, 0.0);
+            //             for vert in &polygon.verts {
+            //                 sum.add_mut(*vert);
+            //             }
+            //             pos.add(sum.scale(1.0 / polygon.verts.len() as f32))
+            //         }
+            //         math::Shape::Circle(_) => unimplemented!(),
+            //     }
+            // }
+            // math::SweptShape::AxisRect { swept, pos } => {
+            //     // axis-rect has local positions
+            //     pos.add(math::Vec2::new(swept.width / 2.0, swept.height / 2.0))
+            // }
+            // math::SweptShape::Moved { swept } => {
+            //     // moved polygon has global positions
+
+            //     let mut sum = math::Vec2::new(0.0, 0.0);
+            //     for vert in &swept.verts {
+            //         sum.add_mut(*vert);
+            //     }
+            //     sum.scale(1.0 / swept.verts.len() as f32)
+            // }
+            math::SweptShape::Unchanged { shape, pos, rot_mat } => {
+                // unchanged shapes have local positions
+                let rot_mat_is_none = rot_mat.is_none();
+                let rot_mat = rot_mat.as_ref().unwrap_or(&math::IDENTITY_MAT2X3);
 
                 match shape {
-                    math::Shape::Segment(segment) => pos.add(segment.a.add(segment.b).scale(0.5)),
-                    math::Shape::Triangle(triangle) => {
-                        pos.add(triangle.a.add(triangle.b.add(triangle.c)).scale(1.0 / 3.0))
+                    math::Shape::Segment(segment) => {
+                        if rot_mat_is_none {
+                            pos.add(segment.a.add(segment.b).scale(0.5))
+                        } else {
+                            pos.add(rot_mat.pre_mul_vec2(segment.a.add(segment.b).scale(0.5)))
+                        }
                     }
-                    math::Shape::Rect(rect) => pos.add(math::Vec2::new(rect.width / 2.0, rect.height / 2.0)),
-                    math::Shape::Circle(_) => unimplemented!(),
+                    math::Shape::Triangle(triangle) => {
+                        if rot_mat_is_none {
+                            pos.add(triangle.a.add(triangle.b.add(triangle.c)).scale(1.0 / 3.0))
+                        } else {
+                            pos.add(rot_mat.pre_mul_vec2(triangle.a.add(triangle.b.add(triangle.c)).scale(1.0 / 3.0)))
+                        }
+                    }
+                    math::Shape::Quad(quad) => {
+                        if rot_mat_is_none {
+                            pos.add(quad.a.add(quad.b.add(quad.c.add(quad.d))).scale(0.25))
+                        } else {
+                            pos.add(rot_mat.pre_mul_vec2(quad.a.add(quad.b.add(quad.c.add(quad.d))).scale(0.25)))
+                        }
+                    }
                     math::Shape::Polygon(polygon) => {
                         let mut sum = math::Vec2::new(0.0, 0.0);
                         for vert in &polygon.verts {
                             sum.add_mut(*vert);
                         }
-                        pos.add(sum.scale(1.0 / polygon.verts.len() as f32))
+                        if rot_mat_is_none {
+                            pos.add(sum.scale(1.0 / polygon.verts.len() as f32))
+                        } else {
+                            pos.add(rot_mat.pre_mul_vec2(sum.scale(1.0 / polygon.verts.len() as f32)))
+                        }
                     }
+                    math::Shape::Circle(_) => unimplemented!(),
                 }
             }
-            math::SweptShape::AxisRect { swept, pos } => {
-                // axis-rect has local positions
-                pos.add(math::Vec2::new(swept.width / 2.0, swept.height / 2.0))
-            }
-            math::SweptShape::Moved { swept } => {
+            math::SweptShape::Changed { swept } => {
                 // moved polygon has global positions
-
                 let mut sum = math::Vec2::new(0.0, 0.0);
                 for vert in &swept.verts {
                     sum.add_mut(*vert);
@@ -220,8 +355,8 @@ fn check_sat(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape)
 /// checks if 2 objects are colliding and returns the contact normal
 /// it prechecks using hitboxes and if the hitboxes are colliding it switches to SAT algorithm
 fn check_collision(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape) -> Option<math::Vec2> {
-    let hitbox_1 = swept_shape_1.hitbox();
-    let hitbox_2 = swept_shape_2.hitbox();
+    let hitbox_1 = swept_shape_1.to_hitbox();
+    let hitbox_2 = swept_shape_2.to_hitbox();
 
     if check_hitboxes(&hitbox_1, &hitbox_2) {
         // hitbox are colliding, check collision using SAT
@@ -278,96 +413,157 @@ pub fn convex_hull(mut verts: Vec<math::Vec2>) -> Result<math::Polygon, error::G
 }
 
 /// generates a swept shape from a stationary or moving shape
-fn generate_swept_shape(pos_1: math::Vec2, pos_2: math::Vec2, shape: &math::Shape) -> math::SweptShape<'_> {
-    if pos_1.square_dist(pos_2) <= EPS_SQR {
-        // the object is not moving
-        math::SweptShape::Unmoved {
+fn generate_swept_shape<'a>(
+    pos_1: math::Vec2,
+    pos_2: math::Vec2,
+    rot_mat: Option<&components::RotationMatrix>,
+    shape: &'a math::Shape,
+) -> math::SweptShape<'a> {
+    let rot_mat_is_none = rot_mat.is_none();
+    let rot_mat = rot_mat.unwrap_or(&components::IDENTITY_ROTATION_MATRIX);
+
+    if pos_1.square_dist(pos_2) <= EPS_SQR && (rot_mat_is_none || rot_mat.curr.approx_equal(&rot_mat.prev)) {
+        // the object is not moving or rotating
+        math::SweptShape::Unchanged {
             shape: shape,
             pos: pos_1,
+            rot_mat: if rot_mat_is_none {
+                None
+            } else {
+                Some(rot_mat.prev.clone())
+            },
         }
     } else {
-        // the object is moving
+        // the object is moving or rotating
         match shape {
             math::Shape::Segment(segment) => {
                 let mut verts = Vec::with_capacity(4);
 
-                verts.push(pos_1.add(segment.a));
-                verts.push(pos_1.add(segment.b));
-                verts.push(pos_2.add(segment.a));
-                verts.push(pos_2.add(segment.b));
+                if rot_mat_is_none {
+                    verts.push(pos_1.add(segment.a));
+                    verts.push(pos_1.add(segment.b));
+                    verts.push(pos_2.add(segment.a));
+                    verts.push(pos_2.add(segment.b));
+                } else {
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(segment.a)));
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(segment.b)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(segment.a)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(segment.b)));
+                }
 
-                math::SweptShape::Moved {
+                math::SweptShape::Changed {
                     swept: convex_hull(verts).expect("we passed more than 3 verts"),
                 }
             }
             math::Shape::Triangle(triangle) => {
                 let mut verts = Vec::with_capacity(6);
 
-                verts.push(pos_1.add(triangle.a));
-                verts.push(pos_1.add(triangle.b));
-                verts.push(pos_1.add(triangle.c));
-                verts.push(pos_2.add(triangle.a));
-                verts.push(pos_2.add(triangle.b));
-                verts.push(pos_2.add(triangle.c));
+                if rot_mat_is_none {
+                    verts.push(pos_1.add(triangle.a));
+                    verts.push(pos_1.add(triangle.b));
+                    verts.push(pos_1.add(triangle.c));
+                    verts.push(pos_2.add(triangle.a));
+                    verts.push(pos_2.add(triangle.b));
+                    verts.push(pos_2.add(triangle.c));
+                } else {
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(triangle.a)));
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(triangle.b)));
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(triangle.c)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(triangle.a)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(triangle.b)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(triangle.c)));
+                }
 
-                math::SweptShape::Moved {
+                math::SweptShape::Changed {
                     swept: convex_hull(verts).expect("we passed more than 3 verts"),
                 }
             }
-            math::Shape::Rect(rect) => {
-                // check for axis optimization
-                if (pos_1.x - pos_2.x).abs() <= EPS {
-                    // vertical-only movement
-                    let min_y = pos_1.y.min(pos_2.y);
-                    let delta_y = (pos_1.y - pos_2.y).abs();
+            math::Shape::Quad(quad) => {
+                // // check for axis optimization
+                // if (pos_1.x - pos_2.x).abs() <= EPS {
+                //     // vertical-only movement
+                //     let min_y = pos_1.y.min(pos_2.y);
+                //     let delta_y = (pos_1.y - pos_2.y).abs();
 
-                    math::SweptShape::AxisRect {
-                        swept: math::Rect::new(rect.width, delta_y + rect.height).expect(
-                            "delta is always positive and the old rect is valid, so this should be always valid",
-                        ),
-                        pos: math::Vec2::new(pos_1.x, min_y),
-                    }
-                } else if (pos_1.y - pos_2.y).abs() <= EPS {
-                    // horizontal-only movement
-                    let min_x = pos_1.x.min(pos_2.x);
-                    let delta_x = (pos_1.x - pos_2.x).abs();
+                //     math::SweptShape::AxisRect {
+                //         swept: math::Rect::new(rect.width, delta_y + rect.height).expect(
+                //             "delta is always positive and the old rect is valid, so this should be always valid",
+                //         ),
+                //         pos: math::Vec2::new(pos_1.x, min_y),
+                //     }
+                // } else if (pos_1.y - pos_2.y).abs() <= EPS {
+                //     // horizontal-only movement
+                //     let min_x = pos_1.x.min(pos_2.x);
+                //     let delta_x = (pos_1.x - pos_2.x).abs();
 
-                    math::SweptShape::AxisRect {
-                        swept: math::Rect::new(delta_x + rect.width, rect.height).expect(
-                            "delta is always positive and the old rect is valid, so this should be always valid",
-                        ),
-                        pos: math::Vec2::new(min_x, pos_1.y),
-                    }
+                //     math::SweptShape::AxisRect {
+                //         swept: math::Rect::new(delta_x + rect.width, rect.height).expect(
+                //             "delta is always positive and the old rect is valid, so this should be always valid",
+                //         ),
+                //         pos: math::Vec2::new(min_x, pos_1.y),
+                //     }
+                // } else {
+                //     let mut verts = Vec::with_capacity(8);
+
+                //     verts.push(pos_1);
+                //     verts.push(pos_1.add(math::Vec2::new(rect.width, 0.0)));
+                //     verts.push(pos_1.add(math::Vec2::new(0.0, rect.height)));
+                //     verts.push(pos_1.add(math::Vec2::new(rect.width, rect.height)));
+                //     verts.push(pos_2);
+                //     verts.push(pos_2.add_scalar(rect.width, 0.0));
+                //     verts.push(pos_2.add_scalar(0.0, rect.height));
+                //     verts.push(pos_2.add_scalar(rect.width, rect.height));
+
+                //     math::SweptShape::Moved {
+                //         swept: convex_hull(verts).expect("we passed more than 3 verts"),
+                //     }
+                // }
+                let mut verts = Vec::with_capacity(8);
+
+                if rot_mat_is_none {
+                    verts.push(pos_1.add(quad.a));
+                    verts.push(pos_1.add(quad.b));
+                    verts.push(pos_1.add(quad.c));
+                    verts.push(pos_1.add(quad.d));
+                    verts.push(pos_2.add(quad.a));
+                    verts.push(pos_2.add(quad.b));
+                    verts.push(pos_2.add(quad.c));
+                    verts.push(pos_2.add(quad.d));
                 } else {
-                    let mut verts = Vec::with_capacity(8);
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(quad.a)));
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(quad.b)));
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(quad.c)));
+                    verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(quad.d)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(quad.a)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(quad.b)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(quad.c)));
+                    verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(quad.d)));
+                }
 
-                    verts.push(pos_1);
-                    verts.push(pos_1.add(math::Vec2::new(rect.width, 0.0)));
-                    verts.push(pos_1.add(math::Vec2::new(0.0, rect.height)));
-                    verts.push(pos_1.add(math::Vec2::new(rect.width, rect.height)));
-                    verts.push(pos_2);
-                    verts.push(pos_2.add_scalar(rect.width, 0.0));
-                    verts.push(pos_2.add_scalar(0.0, rect.height));
-                    verts.push(pos_2.add_scalar(rect.width, rect.height));
-
-                    math::SweptShape::Moved {
-                        swept: convex_hull(verts).expect("we passed more than 3 verts"),
-                    }
+                math::SweptShape::Changed {
+                    swept: convex_hull(verts).expect("we passed more than 3 verts"),
                 }
             }
-            math::Shape::Circle(_) => unimplemented!(),
             math::Shape::Polygon(polygon) => {
                 let mut verts = Vec::with_capacity(polygon.verts.len() * 2);
 
-                for &v in &polygon.verts {
-                    verts.push(pos_1.add(v));
-                    verts.push(pos_2.add(v));
+                if rot_mat_is_none {
+                    for &v in &polygon.verts {
+                        verts.push(pos_1.add(v));
+                        verts.push(pos_2.add(v));
+                    }
+                } else {
+                    for &v in &polygon.verts {
+                        verts.push(pos_1.add(rot_mat.prev.pre_mul_vec2(v)));
+                        verts.push(pos_2.add(rot_mat.curr.pre_mul_vec2(v)));
+                    }
                 }
 
-                math::SweptShape::Moved {
+                math::SweptShape::Changed {
                     swept: convex_hull(verts).expect("we passed more than 3 verts"),
                 }
             }
+            math::Shape::Circle(_) => unimplemented!(),
         }
     }
 }
@@ -375,7 +571,7 @@ fn generate_swept_shape(pos_1: math::Vec2, pos_2: math::Vec2, shape: &math::Shap
 /// updates 2 entities' linear velocity vector after they collide
 fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: entities::Entity, normal: math::Vec2) {
     // update rest
-    if normal.x.abs() <= 0.2 {
+    if normal.x.abs() <= 0.5 {
         // one is above the other
         if normal.y > 0.0
             && let Some(translation) = world.translation.get_mut(entity_1)
@@ -565,9 +761,10 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             continue;
         };
 
-        // checks entity_2 has all the components necessary for being at least a static object and extracts its position and shape
-        let (Some(&components::Transform { pos: pos_2, .. }), Some(_), Some(shape_2)) = (
+        // checks entity_2 has all the components necessary for being at least a static object and extracts its position, rotation_matrix and shape
+        let (Some(&components::Transform { pos: pos_2, .. }), rot_mat_2, Some(_), Some(shape_2)) = (
             world.transform.get(entity_2),
+            world.rotation_matrix.get(entity_2),
             world.surface.get(entity_2),
             world.shape.get(entity_2),
         ) else {
@@ -581,19 +778,27 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             // generate swept_shapes
 
             // re-extract lin_vel_1 and shape_1: lin_vel_1 because it may have changed by compute_reaction(), shape_1 because if it has not moved, swept_shape_1 will keep a reference to it,
-            // and since we need to pass a mutable reference of world to compute_reaction() and world owns shape_1, we cannot have both a mutable and unmutable reference at the same time
-            let (&components::Translation { lin_vel: lin_vel_1, .. }, shape_1) = (
+            // and since we need to pass a mutable reference of world to compute_reaction() and world owns shape_1, we cannot have both a mutable and unmutable reference at the same time;
+            // in addition, extract the rotation_matrix
+            let (rot_mat_1, &components::Translation { lin_vel: lin_vel_1, .. }, shape_1) = (
+                world.rotation_matrix.get(entity_1),
                 world.translation.get(entity_1).expect("missing translation"),
                 world.shape.get(entity_1).expect("missing shape"),
             );
-            let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(lin_vel_1), shape_1); // we are also recomputing the swept_shape at every iteration since its linear velocity may have changed
+
+            let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(lin_vel_1), rot_mat_1, shape_1); // we are also recomputing the swept_shape at every iteration since its linear velocity may have changed
 
             let swept_shape_2 = if lin_vel_2.is_none() {
                 // it is static, generate fixed swept_shape
-                generate_swept_shape(pos_2, pos_2, shape_2)
+                generate_swept_shape(pos_2, pos_2, rot_mat_2, shape_2)
             } else {
                 // it is dynamic, generate swept_shape
-                generate_swept_shape(pos_2, pos_2.add(lin_vel_2.expect("missing lin_vel")), shape_2)
+                generate_swept_shape(
+                    pos_2,
+                    pos_2.add(lin_vel_2.expect("missing lin_vel")),
+                    rot_mat_2,
+                    shape_2,
+                )
             };
 
             // check collision

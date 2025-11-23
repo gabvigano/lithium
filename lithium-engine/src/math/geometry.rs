@@ -91,31 +91,57 @@ impl fmt::Display for HitBox {
     }
 }
 
+pub trait Validate {
+    fn validate(&self) -> Result<(), error::GeometryError>;
+}
+
+pub trait ApplyGlobalPos {
+    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized;
+}
+
+pub trait ApplyMatrix {
+    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized;
+}
+
 pub trait ToHitBox {
-    fn hitbox(&self) -> HitBox;
+    fn to_hitbox(&self) -> HitBox;
 }
 
 #[derive(Clone, Debug)]
 pub enum SweptShape<'a> {
-    Unmoved { shape: &'a Shape, pos: math::Vec2 },
-    AxisRect { swept: Rect, pos: math::Vec2 },
-    Moved { swept: Polygon },
+    Unchanged {
+        shape: &'a Shape,
+        pos: math::Vec2,
+        rot_mat: Option<math::Mat2x3>,
+    },
+    Changed {
+        swept: Polygon,
+    },
 }
 
 impl ToHitBox for SweptShape<'_> {
-    fn hitbox(&self) -> HitBox {
+    fn to_hitbox(&self) -> HitBox {
         match self {
-            SweptShape::Unmoved { shape, pos } => {
+            SweptShape::Unchanged { shape, pos, rot_mat } => {
                 // this is a local position, global position must be added
-                shape.hitbox().add_pos(*pos)
+                // we also need to apply the rotation if it exists since it is not already encoded
+                if let Some(rot_mat) = rot_mat {
+                    shape
+                        .apply_matrix(rot_mat)
+                        .expect("invalid geometry")
+                        .to_hitbox()
+                        .add_pos(*pos)
+                } else {
+                    shape.to_hitbox().add_pos(*pos)
+                }
             }
-            SweptShape::AxisRect { swept, pos } => {
-                // this is a local position, global position must be added
-                swept.hitbox().add_pos(*pos)
-            }
-            SweptShape::Moved { swept } => {
-                // this is already a global position
-                swept.hitbox()
+            SweptShape::Changed { swept } => {
+                // this is already a global position and already encodes the rotation
+                swept.to_hitbox()
             }
         }
     }
@@ -125,34 +151,61 @@ impl ToHitBox for SweptShape<'_> {
 pub enum Shape {
     Segment(Segment),
     Triangle(Triangle),
-    Rect(Rect),
-    Circle(Circle),
+    Quad(Quad),
     Polygon(Polygon),
+    Circle(Circle),
 }
 
-impl Shape {
+impl Validate for Shape {
     #[inline]
-    pub fn validate(&self) -> Result<(), error::EngineError> {
+    fn validate(&self) -> Result<(), error::GeometryError> {
         match self {
             Shape::Segment(segment) => segment.validate()?,
             Shape::Triangle(triangle) => triangle.validate()?,
-            Shape::Rect(rect) => rect.validate()?,
-            Shape::Circle(circle) => circle.validate()?,
+            Shape::Quad(quad) => quad.validate()?,
             Shape::Polygon(polygon) => polygon.validate()?,
+            Shape::Circle(_) => unimplemented!(),
         };
 
         Ok(())
     }
 }
 
+impl ApplyGlobalPos for Shape {
+    #[inline]
+    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
+        Ok(match self {
+            Shape::Segment(segment) => Shape::Segment(segment.apply_global_pos(glob_pos)?),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_global_pos(glob_pos)?),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_global_pos(glob_pos)?),
+            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_global_pos(glob_pos)?),
+            Shape::Circle(_) => unimplemented!(),
+        })
+    }
+}
+
+impl ApplyMatrix for Shape {
+    #[inline]
+    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+        Ok(match self {
+            Shape::Segment(segment) => Shape::Segment(segment.apply_matrix(mat)?),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_matrix(mat)?),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_matrix(mat)?),
+            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_matrix(mat)?),
+            Shape::Circle(_) => unimplemented!(),
+        })
+    }
+}
+
 impl ToHitBox for Shape {
-    fn hitbox(&self) -> HitBox {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
         match self {
-            Shape::Segment(segment) => segment.hitbox(),
-            Shape::Triangle(triangle) => triangle.hitbox(),
-            Shape::Rect(rect) => rect.hitbox(),
-            Shape::Circle(circle) => circle.hitbox(),
-            Shape::Polygon(polygon) => polygon.hitbox(),
+            Shape::Segment(segment) => segment.to_hitbox(),
+            Shape::Triangle(triangle) => triangle.to_hitbox(),
+            Shape::Quad(quad) => quad.to_hitbox(),
+            Shape::Polygon(polygon) => polygon.to_hitbox(),
+            Shape::Circle(circle) => circle.to_hitbox(),
         }
     }
 }
@@ -162,9 +215,9 @@ impl fmt::Display for Shape {
         match self {
             Shape::Segment(segment) => write!(f, "{}", segment),
             Shape::Triangle(triangle) => write!(f, "{}", triangle),
-            Shape::Rect(rect) => write!(f, "{}", rect),
-            Shape::Circle(circle) => write!(f, "{}", circle),
+            Shape::Quad(quad) => write!(f, "{}", quad),
             Shape::Polygon(polygon) => write!(f, "{}", polygon),
+            Shape::Circle(circle) => write!(f, "{}", circle),
         }
     }
 }
@@ -184,16 +237,6 @@ impl Segment {
         segment.validate()?;
 
         Ok(segment)
-    }
-
-    #[inline]
-    pub fn validate(&self) -> Result<(), error::GeometryError> {
-        // check duplicates vertices
-        if self.a.square_dist(self.b) < math::EPS_SQR {
-            return Err(error::GeometryError::DuplicateVertices);
-        };
-
-        Ok(())
     }
 
     #[inline]
@@ -264,9 +307,35 @@ impl Segment {
     }
 }
 
+impl Validate for Segment {
+    #[inline]
+    fn validate(&self) -> Result<(), error::GeometryError> {
+        // check duplicates vertices
+        if self.a.square_dist(self.b) < math::EPS_SQR {
+            return Err(error::GeometryError::DuplicateVertices);
+        };
+
+        Ok(())
+    }
+}
+
+impl ApplyGlobalPos for Segment {
+    #[inline]
+    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
+        Self::new(glob_pos.add(self.a), glob_pos.add(self.b))
+    }
+}
+
+impl ApplyMatrix for Segment {
+    #[inline]
+    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+        Self::new(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
+    }
+}
+
 impl ToHitBox for Segment {
     #[inline]
-    fn hitbox(&self) -> HitBox {
+    fn to_hitbox(&self) -> HitBox {
         let min_x = self.a.x.min(self.b.x);
         let min_y = self.a.y.min(self.b.y);
         let max_x = self.a.x.max(self.b.x);
@@ -278,7 +347,7 @@ impl ToHitBox for Segment {
 
 impl fmt::Display for Segment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "segment ({:.4}, {:.4})", self.a, self.b)
+        write!(f, "segment ({}, {})", self.a, self.b)
     }
 }
 
@@ -411,19 +480,6 @@ impl Triangle {
     }
 
     #[inline]
-    pub fn validate(&self) -> Result<(), error::GeometryError> {
-        // check duplicates vertices
-        if self.a.square_dist(self.b) < math::EPS_SQR
-            || self.a.square_dist(self.c) < math::EPS_SQR
-            || self.b.square_dist(self.c) < math::EPS_SQR
-        {
-            return Err(error::GeometryError::DuplicateVertices);
-        };
-
-        Ok(())
-    }
-
-    #[inline]
     pub fn a(&self) -> math::Vec2 {
         self.a
     }
@@ -454,9 +510,42 @@ impl Triangle {
     }
 }
 
+impl Validate for Triangle {
+    #[inline]
+    fn validate(&self) -> Result<(), error::GeometryError> {
+        // check duplicates vertices
+        if self.a.square_dist(self.b) < math::EPS_SQR
+            || self.a.square_dist(self.c) < math::EPS_SQR
+            || self.b.square_dist(self.c) < math::EPS_SQR
+        {
+            return Err(error::GeometryError::DuplicateVertices);
+        };
+
+        Ok(())
+    }
+}
+
+impl ApplyGlobalPos for Triangle {
+    #[inline]
+    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
+        Self::new(glob_pos.add(self.a), glob_pos.add(self.b), glob_pos.add(self.c))
+    }
+}
+
+impl ApplyMatrix for Triangle {
+    #[inline]
+    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+        Self::new(
+            mat.pre_mul_vec2(self.a),
+            mat.pre_mul_vec2(self.b),
+            mat.pre_mul_vec2(self.c),
+        )
+    }
+}
+
 impl ToHitBox for Triangle {
     #[inline]
-    fn hitbox(&self) -> HitBox {
+    fn to_hitbox(&self) -> HitBox {
         let min_x = self.a.x.min(self.b.x.min(self.c.x));
         let min_y = self.a.y.min(self.b.y.min(self.c.y));
         let max_x = self.a.x.max(self.b.x.max(self.c.x));
@@ -468,7 +557,7 @@ impl ToHitBox for Triangle {
 
 impl fmt::Display for Triangle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "triangle ({:.4}, {:.4}, {:.4})", self.a, self.b, self.c)
+        write!(f, "triangle ({}, {}, {})", self.a, self.b, self.c)
     }
 }
 
@@ -524,7 +613,7 @@ impl Rect {
 
 impl ToHitBox for Rect {
     #[inline]
-    fn hitbox(&self) -> HitBox {
+    fn to_hitbox(&self) -> HitBox {
         HitBox::new(0.0, 0.0, self.width, self.height)
     }
 }
@@ -532,6 +621,253 @@ impl ToHitBox for Rect {
 impl fmt::Display for Rect {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "rectangle ({:.4}, {:.4})", self.width, self.height)
+    }
+}
+
+/// notice that a, b, c and d are local positions, you may need to manually integrate them with a position
+#[derive(Clone, Deserialize, Debug)]
+pub struct Quad {
+    pub(crate) a: math::Vec2,
+    pub(crate) b: math::Vec2,
+    pub(crate) c: math::Vec2,
+    pub(crate) d: math::Vec2,
+}
+
+impl Quad {
+    #[inline]
+    pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Result<Self, error::GeometryError> {
+        let quad = Self { a, b, c, d };
+
+        quad.validate()?;
+
+        Ok(quad)
+    }
+
+    #[inline]
+    pub fn a(&self) -> math::Vec2 {
+        self.a
+    }
+
+    #[inline]
+    pub fn b(&self) -> math::Vec2 {
+        self.b
+    }
+
+    #[inline]
+    pub fn c(&self) -> math::Vec2 {
+        self.c
+    }
+
+    #[inline]
+    pub fn d(&self) -> math::Vec2 {
+        self.d
+    }
+
+    #[inline]
+    pub fn set_a(&mut self, new_a: math::Vec2) {
+        self.a = new_a;
+    }
+
+    #[inline]
+    pub fn set_b(&mut self, new_b: math::Vec2) {
+        self.b = new_b;
+    }
+
+    #[inline]
+    pub fn set_c(&mut self, new_c: math::Vec2) {
+        self.c = new_c;
+    }
+
+    #[inline]
+    pub fn set_d(&mut self, new_d: math::Vec2) {
+        self.d = new_d;
+    }
+}
+
+impl Validate for Quad {
+    #[inline]
+    fn validate(&self) -> Result<(), error::GeometryError> {
+        // check duplicates vertices
+        if self.a.square_dist(self.b) < math::EPS_SQR
+            || self.a.square_dist(self.c) < math::EPS_SQR
+            || self.a.square_dist(self.d) < math::EPS_SQR
+            || self.b.square_dist(self.c) < math::EPS_SQR
+            || self.b.square_dist(self.d) < math::EPS_SQR
+            || self.c.square_dist(self.d) < math::EPS_SQR
+        {
+            return Err(error::GeometryError::DuplicateVertices);
+        };
+
+        // check if the quadrilateral is convex
+        if self.a.signed_area(self.b, self.c) >= -math::EPS
+            || self.b.signed_area(self.c, self.d) >= -math::EPS
+            || self.c.signed_area(self.d, self.a) >= -math::EPS
+            || self.d.signed_area(self.a, self.b) >= -math::EPS
+        {
+            return Err(error::GeometryError::NotConvex);
+        }
+
+        Ok(())
+    }
+}
+
+impl ApplyGlobalPos for Quad {
+    #[inline]
+    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
+        Self::new(
+            glob_pos.add(self.a),
+            glob_pos.add(self.b),
+            glob_pos.add(self.c),
+            glob_pos.add(self.d),
+        )
+    }
+}
+
+impl ApplyMatrix for Quad {
+    #[inline]
+    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+        Self::new(
+            mat.pre_mul_vec2(self.a),
+            mat.pre_mul_vec2(self.b),
+            mat.pre_mul_vec2(self.c),
+            mat.pre_mul_vec2(self.d),
+        )
+    }
+}
+
+impl ToHitBox for Quad {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        let min_x = self.a.x.min(self.b.x.min(self.c.x.min(self.d.x)));
+        let min_y = self.a.y.min(self.b.y.min(self.c.y.min(self.d.y)));
+        let max_x = self.a.x.max(self.b.x.max(self.c.x.max(self.d.x)));
+        let max_y = self.a.y.max(self.b.y.max(self.c.y.max(self.d.y)));
+
+        HitBox::new(min_x, min_y, max_x, max_y)
+    }
+}
+
+impl fmt::Display for Quad {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "quadrilateral ({}, {}, {}, {})", self.a, self.b, self.c, self.d)
+    }
+}
+
+/// polygons must be convex, vertices must be stored counterclockwise, and there must be no collinear edges
+/// notice that vertices are local positions, you may need to manually integrate them with a position
+#[derive(Clone, Deserialize, Debug)]
+pub struct Polygon {
+    pub(crate) verts: Vec<math::Vec2>,
+}
+
+impl Polygon {
+    #[inline]
+    pub fn new(verts: Vec<math::Vec2>) -> Result<Self, error::GeometryError> {
+        let polygon = Self { verts };
+
+        polygon.validate()?;
+
+        Ok(polygon)
+    }
+
+    #[inline]
+    pub fn verts(&self) -> &Vec<math::Vec2> {
+        &self.verts
+    }
+
+    #[inline]
+    pub fn verts_mut(&mut self) -> &mut Vec<math::Vec2> {
+        &mut self.verts
+    }
+
+    #[inline]
+    pub fn set_verts(&mut self, new_verts: Vec<math::Vec2>) {
+        self.verts = new_verts;
+    }
+}
+
+impl Validate for Polygon {
+    fn validate(&self) -> Result<(), error::GeometryError> {
+        let verts_len = self.verts.len();
+
+        if verts_len < 3 {
+            return Err(error::GeometryError::TooFewVertices(verts_len));
+        } else if verts_len == 3 {
+            eprintln!("warning: polygon with 3 vertices, consider Shape::Triangle for efficiency");
+        } else if verts_len == 4 {
+            eprintln!("warning: polygon with 4 vertices, consider Shape::Quad for efficiency");
+        }
+
+        // check duplicates vertices
+        for i in 0..verts_len {
+            for j in (i + 1)..verts_len {
+                if self.verts[i].square_dist(self.verts[j]) < math::EPS_SQR {
+                    return Err(error::GeometryError::DuplicateVertices);
+                }
+            }
+        }
+
+        // check if the polygon is convex
+        for i in 0..verts_len {
+            let i1 = (i + 1) % verts_len; // use modulo indexing to restart when the end is reached
+            let i2 = (i + 2) % verts_len;
+
+            let area = self.verts[i].signed_area(self.verts[i1], self.verts[i2]);
+
+            if area >= -math::EPS {
+                return Err(error::GeometryError::NotConvex);
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl ApplyGlobalPos for Polygon {
+    #[inline]
+    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
+        Self::new(self.verts().into_iter().map(|v| glob_pos.add(*v)).collect())
+    }
+}
+
+impl ApplyMatrix for Polygon {
+    #[inline]
+    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+        Self::new(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect())
+    }
+}
+
+impl ToHitBox for Polygon {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        // initialize extremes
+        let mut min_x = f32::MAX;
+        let mut min_y = f32::MAX;
+        let mut max_x = f32::MIN;
+        let mut max_y = f32::MIN;
+
+        // update extremes
+        for vert in &self.verts {
+            min_x = min_x.min(vert.x);
+            min_y = min_y.min(vert.y);
+            max_x = max_x.max(vert.x);
+            max_y = max_y.max(vert.y);
+        }
+
+        HitBox::new(min_x, min_y, max_x, max_y)
+    }
+}
+
+impl fmt::Display for Polygon {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "polygon (")?;
+        for (i, vert) in self.verts.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", vert)?;
+        }
+        write!(f, ")")
     }
 }
 
@@ -572,7 +908,7 @@ impl Circle {
 
 impl ToHitBox for Circle {
     #[inline]
-    fn hitbox(&self) -> HitBox {
+    fn to_hitbox(&self) -> HitBox {
         let diameter = self.radius * 2.0;
         HitBox::new(0.0, 0.0, diameter, diameter)
     }
@@ -581,106 +917,6 @@ impl ToHitBox for Circle {
 impl fmt::Display for Circle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "circle ({:.4})", self.radius)
-    }
-}
-
-/// polygons must be convex, vertices must be stored counterclockwise, and there must be no collinear edges
-/// notice that vertices are local positions, you may need to manually integrate them with a position
-#[derive(Clone, Deserialize, Debug)]
-pub struct Polygon {
-    pub(crate) verts: Vec<math::Vec2>,
-}
-
-impl Polygon {
-    #[inline]
-    pub fn new(verts: Vec<math::Vec2>) -> Result<Self, error::GeometryError> {
-        let polygon = Self { verts };
-
-        polygon.validate()?;
-
-        Ok(polygon)
-    }
-
-    pub fn validate(&self) -> Result<(), error::GeometryError> {
-        let verts_len = self.verts.len();
-
-        if verts_len < 3 {
-            return Err(error::GeometryError::TooFewVertices(verts_len));
-        } else if verts_len == 3 {
-            eprintln!("warning: polygon with 3 vertices, consider Shape::Triangle for efficiency");
-        }
-
-        // check duplicates vertices
-        for i in 0..verts_len {
-            for j in (i + 1)..verts_len {
-                if self.verts[i].square_dist(self.verts[j]) < math::EPS_SQR {
-                    return Err(error::GeometryError::DuplicateVertices);
-                }
-            }
-        }
-
-        // check if the polygon is convex
-        for i in 0..verts_len {
-            let i1 = (i + 1) % verts_len; // use modulo indexing to restart when the end is reached
-            let i2 = (i + 2) % verts_len;
-
-            let area = self.verts[i].signed_area(self.verts[i1], self.verts[i2]);
-
-            if area >= -math::EPS {
-                return Err(error::GeometryError::NotConvex);
-            }
-        }
-
-        Ok(())
-    }
-
-    #[inline]
-    pub fn verts(&self) -> &Vec<math::Vec2> {
-        &self.verts
-    }
-
-    #[inline]
-    pub fn verts_mut(&mut self) -> &mut Vec<math::Vec2> {
-        &mut self.verts
-    }
-
-    #[inline]
-    pub fn set_verts(&mut self, new_verts: Vec<math::Vec2>) {
-        self.verts = new_verts;
-    }
-}
-
-impl ToHitBox for Polygon {
-    #[inline]
-    fn hitbox(&self) -> HitBox {
-        // initialize extremes
-        let mut min_x = f32::MAX;
-        let mut min_y = f32::MAX;
-        let mut max_x = f32::MIN;
-        let mut max_y = f32::MIN;
-
-        // update extremes
-        for vert in &self.verts {
-            min_x = min_x.min(vert.x);
-            min_y = min_y.min(vert.y);
-            max_x = max_x.max(vert.x);
-            max_y = max_y.max(vert.y);
-        }
-
-        HitBox::new(min_x, min_y, max_x, max_y)
-    }
-}
-
-impl fmt::Display for Polygon {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "polygon (")?;
-        for (i, vert) in self.verts.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", vert)?;
-        }
-        write!(f, ")")
     }
 }
 

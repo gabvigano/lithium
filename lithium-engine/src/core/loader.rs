@@ -1,6 +1,7 @@
 use crate::{
     core::{error, world::World},
     ecs::{components, entities},
+    math::geometry::Validate,
 };
 
 pub fn load_static_map(
@@ -19,10 +20,12 @@ pub fn load_static_map(
         let entity = entity_manager.create();
         entities.push(entity);
 
-        let initial_tranform: components::Transform = obj.transform.into();
+        let rot_degrees = obj.transform.rot_degrees;
 
-        world.initial_transform.insert(entity, initial_tranform.clone())?;
-        world.transform.insert(entity, initial_tranform)?;
+        world.transform.insert(entity, obj.transform.into())?;
+        world
+            .rotation_matrix
+            .insert(entity, obj.rotation_matrix.to_rotation_matrix(rot_degrees))?;
         world.surface.insert(entity, obj.surface.into())?;
         world.shape.insert(entity, obj.shape)?;
         world.material.insert(entity, obj.material.into())?;
@@ -47,11 +50,14 @@ pub fn load_dynamic_map(
         let entity = entity_manager.create();
         entities.push(entity);
 
-        let initial_tranform: components::Transform = obj.transform.into();
+        let rot_degrees = obj.transform.rot_degrees;
 
-        world.initial_transform.insert(entity, initial_tranform.clone())?;
-        world.transform.insert(entity, initial_tranform)?;
+        world.transform.insert(entity, obj.transform.into())?;
+        world
+            .rotation_matrix
+            .insert(entity, obj.rotation_matrix.to_rotation_matrix(rot_degrees))?;
         world.translation.insert(entity, obj.translation.try_into()?)?;
+        world.rotation.insert(entity, obj.rotation.try_into()?)?;
         world.surface.insert(entity, obj.surface.into())?;
         world.shape.insert(entity, obj.shape)?;
         world.material.insert(entity, obj.material.into())?;

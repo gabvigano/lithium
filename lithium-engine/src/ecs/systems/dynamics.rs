@@ -21,22 +21,6 @@ pub fn reset_rest(world: &mut World) {
 }
 
 #[inline]
-pub fn reset_pos(world: &mut World) {
-    for (entity, transform) in world.transform.iter_mut() {
-        if let Some(initial_transform) = world.initial_transform.get(entity) {
-            *transform = initial_transform.clone();
-        }
-    }
-}
-
-#[inline]
-pub fn reset_vel(world: &mut World, new_vel: math::Vec2) {
-    for (_, translation) in world.translation.iter_mut() {
-        translation.set_lin_vel(new_vel);
-    }
-}
-
-#[inline]
 pub fn reset_force(world: &mut World, new_force: math::Vec2) {
     for (_, translation) in world.translation.iter_mut() {
         translation.set_force(new_force.scale(translation.mass()));
@@ -58,6 +42,13 @@ pub fn update_lin_vel(world: &mut World) {
         translation
             .lin_vel
             .add_mut(translation.force.scale(translation.inv_mass()));
+    }
+}
+
+#[inline]
+pub fn swap_rotation_matrices(world: &mut World) {
+    for (_, rotation_matrix) in world.rotation_matrix.iter_mut() {
+        rotation_matrix.swap();
     }
 }
 

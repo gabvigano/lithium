@@ -1,15 +1,6 @@
 use crate::{math, renderer::scene};
 use macroquad::prelude;
 
-pub fn display(msgs: &[String]) {
-    let mut y = 25.0;
-
-    for msg in msgs {
-        prelude::draw_text(msg, 20.0, y, 16.0, prelude::WHITE);
-        y += 20.0;
-    }
-}
-
 pub fn render_vector(
     mut start_pos: math::Vec2,
     mut vec: math::Vec2,

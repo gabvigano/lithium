@@ -3,21 +3,23 @@ use crate::{core::error, math};
 use serde::Deserialize;
 use std::fmt;
 
+pub static IDENTITY_ROTATION_MATRIX: RotationMatrix = RotationMatrix::identity();
+
 #[derive(Deserialize)]
 pub struct TransformSpec {
     pub pos: math::Vec2,
-    pub rot: math::Vec2,
+    pub rot_degrees: f32,
 }
 
 #[derive(Clone, Debug)]
 pub struct Transform {
     pub(crate) pos: math::Vec2,
-    pub(crate) rot: math::Vec2,
+    pub(crate) rot: math::Radians,
 }
 
 impl Transform {
     #[inline]
-    pub fn new(pos: math::Vec2, rot: math::Vec2) -> Self {
+    pub fn new(pos: math::Vec2, rot: math::Radians) -> Self {
         Self { pos, rot }
     }
 
@@ -27,7 +29,7 @@ impl Transform {
     }
 
     #[inline]
-    pub fn rot(&self) -> math::Vec2 {
+    pub fn rot(&self) -> math::Radians {
         self.rot
     }
 
@@ -37,7 +39,7 @@ impl Transform {
     }
 
     #[inline]
-    pub fn set_rot(&mut self, new_rot: math::Vec2) {
+    pub fn set_rot(&mut self, new_rot: math::Radians) {
         self.rot = new_rot
     }
 }
@@ -50,7 +52,120 @@ impl fmt::Display for Transform {
 
 impl From<TransformSpec> for Transform {
     fn from(spec: TransformSpec) -> Self {
-        Self::new(spec.pos, spec.rot)
+        Self::new(spec.pos, math::Radians::from_degrees(spec.rot_degrees))
+    }
+}
+
+#[derive(Deserialize)]
+pub struct RotationMatrixSpec {
+    pub pivot: math::Vec2,
+}
+
+impl RotationMatrixSpec {
+    #[inline]
+    pub fn to_rotation_matrix(&self, rot_degrees: f32) -> RotationMatrix {
+        let radians = math::Radians::from_degrees(rot_degrees).norm();
+
+        RotationMatrix::new(
+            math::Mat2x3::from_rot_and_pivot(radians, self.pivot),
+            math::Mat2x3::from_rot_and_pivot(radians, self.pivot),
+        )
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RotationMatrix {
+    pub(crate) prev: math::Mat2x3,
+    pub(crate) curr: math::Mat2x3,
+}
+
+impl RotationMatrix {
+    #[inline]
+    pub fn new(prev: math::Mat2x3, curr: math::Mat2x3) -> Self {
+        Self { prev, curr }
+    }
+
+    #[inline]
+    pub const fn zero() -> Self {
+        Self {
+            prev: math::Mat2x3::zero(),
+            curr: math::Mat2x3::zero(),
+        }
+    }
+
+    #[inline]
+    pub const fn one() -> Self {
+        Self {
+            prev: math::Mat2x3::one(),
+            curr: math::Mat2x3::one(),
+        }
+    }
+
+    #[inline]
+    pub const fn identity() -> Self {
+        Self {
+            prev: math::Mat2x3::identity(),
+            curr: math::Mat2x3::identity(),
+        }
+    }
+
+    #[inline]
+    pub fn get_prev(&self) -> &math::Mat2x3 {
+        &self.prev
+    }
+
+    #[inline]
+    pub fn get_prev_mut(&mut self) -> &mut math::Mat2x3 {
+        &mut self.prev
+    }
+
+    #[inline]
+    pub fn get_curr(&self) -> &math::Mat2x3 {
+        &self.curr
+    }
+
+    #[inline]
+    pub fn get_curr_mut(&mut self) -> &mut math::Mat2x3 {
+        &mut self.curr
+    }
+
+    #[inline]
+    pub fn set_prev(&mut self, new_mat: math::Mat2x3) {
+        self.prev = new_mat;
+    }
+
+    #[inline]
+    pub fn set_curr(&mut self, new_mat: math::Mat2x3) {
+        self.curr = new_mat;
+    }
+
+    #[inline]
+    pub fn update(&mut self, transform: &mut Transform, delta_rot: math::Radians, pivot: math::Vec2) {
+        if delta_rot.0.abs() <= math::EPS {
+            // early return deltas close to 0
+            return;
+        }
+
+        // update transform.rot and normalize
+        transform.rot.0 += delta_rot.0;
+        transform.rot.norm();
+
+        // compute the transformation for this rotation
+        let transformation = math::Mat2x3::from_rot_and_pivot(delta_rot, pivot);
+
+        // apply the rotation to the current rotation matrix
+        self.curr.pre_mul_mut(&transformation);
+    }
+
+    #[inline]
+    pub fn swap(&mut self) {
+        self.prev = self.curr.clone();
+    }
+}
+
+impl fmt::Display for RotationMatrix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "rotation_matrix (prev: {}, curr: {})", self.prev, self.curr)
     }
 }
 
@@ -137,7 +252,7 @@ impl fmt::Display for Translation {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "translation (lin_vel: {:.4}, force: {:.4}, mass: {:.4}, rest: {})",
+            "translation (lin_vel: {}, force: {}, mass: {:.4}, rest: {})",
             self.lin_vel, self.force, self.mass, self.rest
         )
     }
@@ -293,7 +408,11 @@ impl Surface {
 
 impl fmt::Display for Surface {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "surface (elast: {:.4})", self.elast)
+        write!(
+            f,
+            "surface (elast: {:.4}, static_friction: {:.4}, kinetic_friction: {:.4})",
+            self.elast, self.static_friction, self.kinetic_friction
+        )
     }
 }
 
@@ -373,6 +492,7 @@ impl From<MaterialSpec> for Material {
 #[derive(Deserialize)]
 pub struct StaticSpec {
     pub transform: TransformSpec,
+    pub rotation_matrix: RotationMatrixSpec,
     pub surface: SurfaceSpec,
     pub shape: math::Shape,
     pub material: MaterialSpec,
@@ -381,7 +501,9 @@ pub struct StaticSpec {
 #[derive(Deserialize)]
 pub struct DynamicSpec {
     pub transform: TransformSpec,
+    pub rotation_matrix: RotationMatrixSpec,
     pub translation: TranslationSpec,
+    pub rotation: RotationSpec,
     pub surface: SurfaceSpec,
     pub shape: math::Shape,
     pub material: MaterialSpec,

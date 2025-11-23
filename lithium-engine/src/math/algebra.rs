@@ -3,6 +3,7 @@ use std::fmt;
 
 pub const EPS: f32 = 1e-6;
 pub const EPS_SQR: f32 = EPS * EPS;
+pub static IDENTITY_MAT2X3: Mat2x3 = Mat2x3::identity();
 
 #[inline(always)]
 pub fn pow2(x: f32) -> f32 {
@@ -22,8 +23,23 @@ impl Vec2 {
     }
 
     #[inline]
+    pub const fn zero() -> Self {
+        Self { x: 0.0, y: 0.0 }
+    }
+
+    #[inline]
+    pub const fn one() -> Self {
+        Self { x: 1.0, y: 1.0 }
+    }
+
+    #[inline]
     pub fn equal(self, vec2: Self) -> bool {
         self.x == vec2.x && self.y == vec2.y
+    }
+
+    #[inline]
+    pub fn approx_equal(self, vec2: Self) -> bool {
+        (self.x - vec2.x).abs() <= EPS && (self.y - vec2.y).abs() <= EPS
     }
 
     #[inline]
@@ -209,6 +225,130 @@ impl fmt::Display for Vec2 {
     }
 }
 
+/// column-major 2x3 matrix; the matrix is like this
+/// [x.0 y.0 z.0]
+/// [x.1 y.1 z.1]
+///
+/// conceptually represents a 3x3 matrix with an implicit third row [0 0 1],
+/// so some operations (like mat2x3 * mat2x3) that would not even be possible
+/// are done by hardcoding that third row
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct Mat2x3 {
+    pub x: (f32, f32),
+    pub y: (f32, f32),
+    pub z: (f32, f32),
+}
+
+impl Mat2x3 {
+    #[inline]
+    pub fn new(x: (f32, f32), y: (f32, f32), z: (f32, f32)) -> Self {
+        Self { x: x, y: y, z: z }
+    }
+
+    #[inline]
+    pub fn from_rot_and_pivot(rot: Radians, pivot: Vec2) -> Self {
+        let (cos, sin) = (rot.0.cos(), rot.0.sin());
+
+        Self::new(
+            (cos, sin),
+            (-sin, cos),
+            (
+                (1.0 - cos) * pivot.x + sin * pivot.y,
+                (1.0 - cos) * pivot.y - sin * pivot.x,
+            ),
+        )
+    }
+
+    #[inline]
+    pub const fn zero() -> Self {
+        Self {
+            x: (0.0, 0.0),
+            y: (0.0, 0.0),
+            z: (0.0, 0.0),
+        }
+    }
+
+    #[inline]
+    pub const fn one() -> Self {
+        Self {
+            x: (1.0, 1.0),
+            y: (1.0, 1.0),
+            z: (1.0, 1.0),
+        }
+    }
+
+    #[inline]
+    pub const fn identity() -> Self {
+        Self {
+            x: (1.0, 0.0),
+            y: (0.0, 1.0),
+            z: (0.0, 0.0),
+        }
+    }
+
+    #[inline]
+    pub fn equal(&self, mat2: &Self) -> bool {
+        self.x.0 == mat2.x.0
+            && self.x.1 == mat2.x.1
+            && self.y.0 == mat2.y.0
+            && self.y.1 == mat2.y.1
+            && self.z.0 == mat2.z.0
+            && self.z.1 == mat2.z.1
+    }
+
+    #[inline]
+    pub fn approx_equal(&self, mat2: &Self) -> bool {
+        (self.x.0 - mat2.x.0).abs() <= EPS
+            && (self.x.1 - mat2.x.1).abs() <= EPS
+            && (self.y.0 - mat2.y.0).abs() <= EPS
+            && (self.y.1 - mat2.y.1).abs() <= EPS
+            && (self.z.0 - mat2.z.0).abs() <= EPS
+            && (self.z.1 - mat2.z.1).abs() <= EPS
+    }
+
+    #[inline]
+    pub fn pre_mul(&self, mat2: &Self) -> Self {
+        Self::new(
+            (
+                self.x.0.mul_add(mat2.x.0, self.x.1 * mat2.y.0),
+                self.x.0.mul_add(mat2.x.1, self.x.1 * mat2.y.1),
+            ),
+            (
+                self.y.0.mul_add(mat2.x.0, self.y.1 * mat2.y.0),
+                self.y.0.mul_add(mat2.x.1, self.y.1 * mat2.y.1),
+            ),
+            (
+                self.z.0.mul_add(mat2.x.0, self.z.1.mul_add(mat2.y.0, mat2.z.0)),
+                self.z.0.mul_add(mat2.x.1, self.z.1.mul_add(mat2.y.1, mat2.z.1)),
+            ),
+        )
+    }
+
+    #[inline]
+    pub fn pre_mul_mut(&mut self, mat2: &Self) {
+        *self = self.pre_mul(mat2);
+    }
+
+    #[inline]
+    pub fn pre_mul_vec2(&self, vec: Vec2) -> Vec2 {
+        Vec2::new(
+            vec.x * self.x.0 + vec.y * self.y.0 + self.z.0,
+            vec.x * self.x.1 + vec.y * self.y.1 + self.z.1,
+        )
+    }
+}
+
+impl fmt::Display for Mat2x3 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "[[{:.4} , {:.4} , {:.4}] , [{:.4} , {:.4} , {:.4}]]",
+            self.x.0, self.y.0, self.z.0, self.x.1, self.y.1, self.z.1
+        )
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum Axis {
     X,
@@ -216,30 +356,28 @@ pub enum Axis {
 }
 
 #[derive(Copy, Clone, Deserialize, Debug)]
-pub struct Angle {
-    pub radians: f32,
-}
+pub struct Radians(pub f32);
 
-impl Angle {
+impl Radians {
     #[inline]
     pub fn new(radians: f32) -> Self {
-        Self { radians }
+        Self(radians)
+    }
+
+    #[inline]
+    pub fn from_degrees(degrees: f32) -> Self {
+        Self::new(degrees.to_radians()).norm()
     }
 
     #[inline]
     pub fn norm(mut self) -> Self {
-        self.radians = self.radians.rem_euclid(std::f32::consts::PI * 2.0);
+        self.0 = self.0.rem_euclid(std::f32::consts::TAU);
         self
-    }
-
-    #[inline]
-    pub fn to_vec2(self) -> Vec2 {
-        Vec2::new(self.radians.cos(), self.radians.sin())
     }
 }
 
-impl fmt::Display for Angle {
+impl fmt::Display for Radians {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:.4} rad", self.radians)
+        write!(f, "{:.4} rad", self.0)
     }
 }

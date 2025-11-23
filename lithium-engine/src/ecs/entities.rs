@@ -14,4 +14,8 @@ impl EntityManager {
         self.next_id += 1;
         id
     }
+
+    pub fn reset(&mut self) {
+        *self = Self::new();
+    }
 }

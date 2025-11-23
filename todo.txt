@@ -8,10 +8,10 @@
 [x] rebuild the collisions algorithm
 [x] make the collisions algorithm work (recursion goes in stackoverflow)
 > there are currently different bugs that cause the collisions algorithm to crash due stackoverflow:
-[x]     - when a dynamic object rests on top of another dynamic object
-[ ]     - when a dynamic object slides over a static or dynamic object and reaches its edge while moving at a relatively slow speed; I actually believe there is an issue with collisions on vertices
-[ ]     - when 2 dynamic objects hit each other too quickly (seems like vel > 40)
-[ ]     - when 2 dynamic objects fall on top of another dynamic object (?)
+    - [x] when a dynamic object rests on top of another dynamic object
+    - [ ] when a dynamic object slides over a static or dynamic object and reaches its edge while moving at a relatively slow speed; I actually believe there is an issue with collisions on vertices
+    - [ ] when 2 dynamic objects hit each other too quickly (seems like vel > 40)
+    - [ ] when 2 dynamic objects fall on top of another dynamic object (?)
 [ ] implement collision support for all shapes
 [ ] make a more detailed path-tracer (by only adding velocities, some information reguarding the path are lost, we should update position as well)
 
@@ -30,9 +30,9 @@
 
 # system update
 > look for optimizations:
-[ ]     - in collisions, we can use an algorithm faster than the monotone chain algorithm when the polygons translate without rotating
-[ ]     - in collisions, we can implement triangles and rectangles as special cases
-[x]     - in collisions, if we keep the iteration instead of the recursion we can early return when no more collisions are detected
+    - [ ] in collisions, we can use an algorithm faster than the monotone chain algorithm when the polygons translate without rotating
+    - [ ] in collisions, we can implement triangles and rectangles as special cases
+    - [x] in collisions, if we keep the iteration instead of the recursion we can early return when no more collisions are detected
 [x] better exception handling with Result instead of panic
 [ ] refactor code (rename variables and functions, write comments and docstring)
 [x] organize files structure
@@ -47,15 +47,29 @@
 # system update
 [x] fix polygon convex check when loading map
 [x] review API and security: make components private when necessary
-[ ] support transform rotation (manually rotate objects)
+[ ] support transform rotation (manually rotate objects):
+    - [x] render rotation for all shapes
+    - [x] trait for each shape to apply a global position
+    - [x] trait for each shape to apply a transformation
+    - [x] new SweptShape struct supporting rotations
+    - [x] compute swept shapes with rotation for all shapes
+    - [ ] concave polygon for swept shape when rotating
+
+[x] change validate() for each shape into a trait
 
 # physics
 [ ] support physical rotation (so angular velocity and acceleration...)
+
+# system update
+[ ] support circles
 
 # rendering
 [ ] switch to winit + wgpu for graphics
 [ ] particle system
 [ ] textures support
+
+# animations
+[ ] animations support
 
 # audio
 [ ] audio support
