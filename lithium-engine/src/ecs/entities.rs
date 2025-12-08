@@ -15,6 +15,10 @@ impl EntityManager {
         id
     }
 
+    pub fn skip_to(&mut self, idx: Entity) {
+        self.next_id = idx;
+    }
+
     pub fn reset(&mut self) {
         *self = Self::new();
     }

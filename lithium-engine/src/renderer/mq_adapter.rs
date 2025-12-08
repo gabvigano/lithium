@@ -1,6 +1,5 @@
 use crate::{
-    core::world,
-    ecs::components,
+    ecs::{components, world::World},
     math::{self, algebra},
     renderer::scene,
 };
@@ -19,12 +18,12 @@ pub fn color_to_mq(color: math::Color) -> mq_prelude::Color {
     }
 }
 
-pub fn render(world: &world::World, camera: &scene::Camera) {
+pub fn render<const N: usize>(world: &World<N>, camera: &scene::Camera) {
     // get reference of the material vector
-    let mats = world.material.get_ref();
+    let mats = world.engine.material.get_ref();
 
     // copy entities implementing material
-    let ents = world.material.get_ents();
+    let ents = world.engine.material.get_ents();
 
     // zip vector toghether
     let mut pairs: Vec<(&components::Material, u32)> = mats.iter().zip(ents).collect();
@@ -36,16 +35,16 @@ pub fn render(world: &world::World, camera: &scene::Camera) {
 
     for (material, entity) in pairs {
         if material.show {
-            let Some(&components::Transform { pos, .. }) = world.transform.get(entity) else {
+            let Some(&components::Transform { pos, .. }) = world.engine.transform.get(entity) else {
                 continue;
             };
-            let Some(shape) = world.shape.get(entity) else {
+            let Some(shape) = world.engine.shape.get(entity) else {
                 continue;
             };
 
             let color = color_to_mq(material.color);
 
-            let rot_mat = world.rotation_matrix.get(entity);
+            let rot_mat = world.engine.rotation_matrix.get(entity);
             let rot_mat_is_none = rot_mat.is_none();
             let rot_mat = if rot_mat_is_none {
                 &algebra::IDENTITY_MAT2X3

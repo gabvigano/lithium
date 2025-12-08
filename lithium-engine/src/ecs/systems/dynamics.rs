@@ -1,6 +1,5 @@
 use crate::{
-    core::world::World,
-    ecs::{components, entities},
+    ecs::{components, entities, world::World},
     math,
 };
 
@@ -14,31 +13,31 @@ fn clamp_toward_zero(value: f32, limit: Option<f32>) -> f32 {
 }
 
 #[inline]
-pub fn reset_rest(world: &mut World) {
-    for (_, translation) in world.translation.iter_mut() {
+pub fn reset_rest<const N: usize>(world: &mut World<N>) {
+    for (_, translation) in world.engine.translation.iter_mut() {
         translation.rest = false;
     }
 }
 
 #[inline]
-pub fn reset_force(world: &mut World, new_force: math::Vec2) {
-    for (_, translation) in world.translation.iter_mut() {
+pub fn reset_force<const N: usize>(world: &mut World<N>, new_force: math::Vec2) {
+    for (_, translation) in world.engine.translation.iter_mut() {
         translation.set_force(new_force.scale(translation.mass()));
     }
 }
 
 #[inline]
-pub fn update_pos(world: &mut World) {
-    for (entity, transform) in world.transform.iter_mut() {
-        if let Some(components::Translation { lin_vel, .. }) = world.translation.get(entity) {
+pub fn update_pos<const N: usize>(world: &mut World<N>) {
+    for (entity, transform) in world.engine.transform.iter_mut() {
+        if let Some(components::Translation { lin_vel, .. }) = world.engine.translation.get(entity) {
             transform.pos.add_mut(*lin_vel);
         }
     }
 }
 
 #[inline]
-pub fn update_lin_vel(world: &mut World) {
-    for (_, translation) in world.translation.iter_mut() {
+pub fn update_lin_vel<const N: usize>(world: &mut World<N>) {
+    for (_, translation) in world.engine.translation.iter_mut() {
         translation
             .lin_vel
             .add_mut(translation.force.scale(translation.inv_mass()));
@@ -46,20 +45,20 @@ pub fn update_lin_vel(world: &mut World) {
 }
 
 #[inline]
-pub fn swap_rotation_matrices(world: &mut World) {
-    for (_, rotation_matrix) in world.rotation_matrix.iter_mut() {
+pub fn swap_rotation_matrices<const N: usize>(world: &mut World<N>) {
+    for (_, rotation_matrix) in world.engine.rotation_matrix.iter_mut() {
         rotation_matrix.swap();
     }
 }
 
-pub fn apply_axis_lin_vel(
-    world: &mut World,
+pub fn apply_axis_lin_vel<const N: usize>(
+    world: &mut World<N>,
     entity: entities::Entity,
     new_lin_vel: f32,
     limit: Option<f32>,
     axis: math::Axis,
 ) -> Option<()> {
-    let translation = world.translation.get_mut(entity)?;
+    let translation = world.engine.translation.get_mut(entity)?;
 
     match axis {
         math::Axis::X => {
@@ -73,8 +72,13 @@ pub fn apply_axis_lin_vel(
     Some(())
 }
 
-pub fn apply_vel(world: &mut World, entity: entities::Entity, new_vel: math::Vec2, limit: Option<f32>) -> Option<()> {
-    let translation = world.translation.get_mut(entity)?;
+pub fn apply_vel<const N: usize>(
+    world: &mut World<N>,
+    entity: entities::Entity,
+    new_vel: math::Vec2,
+    limit: Option<f32>,
+) -> Option<()> {
+    let translation = world.engine.translation.get_mut(entity)?;
 
     translation.lin_vel.x = clamp_toward_zero(translation.lin_vel.x + new_vel.x, limit);
     translation.lin_vel.y = clamp_toward_zero(translation.lin_vel.y + new_vel.y, limit);
@@ -82,14 +86,14 @@ pub fn apply_vel(world: &mut World, entity: entities::Entity, new_vel: math::Vec
     Some(())
 }
 
-pub fn apply_axis_force(
-    world: &mut World,
+pub fn apply_axis_force<const N: usize>(
+    world: &mut World<N>,
     entity: entities::Entity,
     new_force: f32,
     limit: Option<f32>,
     axis: math::Axis,
 ) -> Option<()> {
-    let translation = world.translation.get_mut(entity)?;
+    let translation = world.engine.translation.get_mut(entity)?;
 
     match axis {
         math::Axis::X => {
@@ -103,8 +107,12 @@ pub fn apply_axis_force(
     Some(())
 }
 
-pub fn apply_force(world: &mut World, entity: entities::Entity, new_force: math::Vec2) -> Option<()> {
-    let translation = world.translation.get_mut(entity)?;
+pub fn apply_force<const N: usize>(
+    world: &mut World<N>,
+    entity: entities::Entity,
+    new_force: math::Vec2,
+) -> Option<()> {
+    let translation = world.engine.translation.get_mut(entity)?;
 
     translation.force.add_mut(new_force);
 

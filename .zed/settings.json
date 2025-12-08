@@ -1,0 +1,8 @@
+{
+  // disable errors for yaml files to avoid "unresolved tag" errors
+  "languages": {
+    "YAML": {
+      "enable_language_server": false
+    }
+  }
+}

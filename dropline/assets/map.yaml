@@ -1,0 +1,467 @@
+# entity: 0 is set to be the player
+
+- entity: 0
+  kind: transform
+  data: { pos: { x: 625.0, y: 100.0 }, rot_degrees: 0.0 }
+
+- entity: 0
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 0
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 1.0 }
+
+- entity: 0
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 0
+  kind: surface
+  data: { elast: 0.5, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 0
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 15.0 }
+    c: { x: 15.0, y: 15.0 }
+    d: { x: 15.0, y: 0.0 }
+
+- entity: 0
+  kind: material
+  data: { color: { r: 0, g: 255, b: 0, a: 255 }, layer: 2, show: true }
+
+- entity: 1
+  kind: transform
+  data: { pos: { x: 0.0, y: 500.0 }, rot_degrees: 15.0 }
+
+- entity: 1
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 1
+  kind: surface
+  data: { elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 1
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 25.0 }
+    c: { x: 2000.0, y: 25.0 }
+    d: { x: 2000.0, y: 0.0 }
+
+- entity: 1
+  kind: material
+  data: { color: { r: 255, g: 255, b: 255, a: 255 }, layer: 0, show: true }
+
+- entity: 2
+  kind: transform
+  data: { pos: { x: -300.0, y: 400.0 }, rot_degrees: 0.0 }
+
+- entity: 2
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 2
+  kind: surface
+  data: { elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 2
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 50.0 }
+    c: { x: 150.0, y: 50.0 }
+    d: { x: 150.0, y: 0.0 }
+
+- entity: 2
+  kind: material
+  data: { color: { r: 155, g: 155, b: 255, a: 255 }, layer: 0, show: true }
+
+- entity: 3
+  kind: transform
+  data: { pos: { x: 75.0, y: 175.0 }, rot_degrees: 15.0 }
+
+- entity: 3
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 3
+  kind: surface
+  data: { elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 3
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 50.0 }
+    c: { x: 150.0, y: 50.0 }
+    d: { x: 150.0, y: 0.0 }
+
+- entity: 3
+  kind: material
+  data: { color: { r: 155, g: 155, b: 255, a: 255 }, layer: 0, show: true }
+
+- entity: 4
+  kind: transform
+  data: { pos: { x: 400.0, y: 250.0 }, rot_degrees: -15.0 }
+
+- entity: 4
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 4
+  kind: surface
+  data: { elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 4
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 50.0 }
+    c: { x: 150.0, y: 50.0 }
+    d: { x: 150.0, y: 0.0 }
+
+- entity: 4
+  kind: material
+  data: { color: { r: 255, g: 155, b: 155, a: 255 }, layer: 0, show: true }
+
+- entity: 5
+  kind: transform
+  data: { pos: { x: 200.0, y: 350.0 }, rot_degrees: 10.0 }
+
+- entity: 5
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 5
+  kind: surface
+  data: { elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 5
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 50.0 }
+    c: { x: 150.0, y: 50.0 }
+    d: { x: 150.0, y: 0.0 }
+
+- entity: 5
+  kind: material
+  data: { color: { r: 155, g: 255, b: 155, a: 255 }, layer: 0, show: true }
+
+- entity: 6
+  kind: transform
+  data: { pos: { x: 700.0, y: 300.0 }, rot_degrees: 5.0 }
+
+- entity: 6
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 6
+  kind: surface
+  data: { elast: 1.0, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 6
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 50.0 }
+    c: { x: 300.0, y: 50.0 }
+    d: { x: 300.0, y: 0.0 }
+
+- entity: 6
+  kind: material
+  data: { color: { r: 155, g: 255, b: 155, a: 255 }, layer: 0, show: true }
+
+- entity: 7
+  kind: transform
+  data: { pos: { x: 1200.0, y: -100.0 }, rot_degrees: 30.0 }
+
+- entity: 7
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 7
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 5.0 }
+
+- entity: 7
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 7
+  kind: surface
+  data: { elast: 0.5, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 7
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 80.0 }
+    c: { x: 80.0, y: 80.0 }
+    d: { x: 80.0, y: 0.0 }
+
+- entity: 7
+  kind: material
+  data: { color: { r: 255, g: 0, b: 255, a: 255 }, layer: 2, show: true }
+
+- entity: 8
+  kind: transform
+  data: { pos: { x: 400.0, y: 400.0 }, rot_degrees: 0.0 }
+
+- entity: 8
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 8
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 4.0 }
+
+- entity: 8
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 8
+  kind: surface
+  data: { elast: 0.6, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 8
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 65.0 }
+    c: { x: 65.0, y: 65.0 }
+    d: { x: 65.0, y: 0.0 }
+
+- entity: 8
+  kind: material
+  data: { color: { r: 255, g: 0, b: 0, a: 255 }, layer: 2, show: true }
+
+- entity: 9
+  kind: transform
+  data: { pos: { x: 600.0, y: 0.0 }, rot_degrees: 45.0 }
+
+- entity: 9
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 9
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.5 }
+
+- entity: 9
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 9
+  kind: surface
+  data: { elast: 0.65, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 9
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 15.0 }
+    c: { x: 15.0, y: 15.0 }
+    d: { x: 15.0, y: 0.0 }
+
+- entity: 9
+  kind: material
+  data: { color: { r: 255, g: 255, b: 0, a: 255 }, layer: 2, show: true }
+
+- entity: 10
+  kind: transform
+  data: { pos: { x: 650.0, y: 0.0 }, rot_degrees: 0.0 }
+
+- entity: 10
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 10
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.75 }
+
+- entity: 10
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 10
+  kind: surface
+  data: { elast: 0.5, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 10
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 15.0 }
+    c: { x: 15.0, y: 15.0 }
+    d: { x: 15.0, y: 0.0 }
+
+- entity: 10
+  kind: material
+  data: { color: { r: 0, g: 255, b: 255, a: 255 }, layer: 2, show: true }
+
+- entity: 11
+  kind: transform
+  data: { pos: { x: 425.0, y: 325.0 }, rot_degrees: 0.0 }
+
+- entity: 11
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 11
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.5 }
+
+- entity: 11
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 11
+  kind: surface
+  data: { elast: 0.65, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 11
+  kind: shape
+  data: !Quad
+    a: { x: 0.0, y: 0.0 }
+    b: { x: 0.0, y: 15.0 }
+    c: { x: 15.0, y: 15.0 }
+    d: { x: 15.0, y: 0.0 }
+
+- entity: 11
+  kind: material
+  data: { color: { r: 0, g: 0, b: 255, a: 255 }, layer: 2, show: true }
+
+- entity: 12
+  kind: transform
+  data: { pos: { x: 500.0, y: 325.0 }, rot_degrees: 0.0 }
+
+- entity: 12
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 12
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.5 }
+
+- entity: 12
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 12
+  kind: surface
+  data: { elast: 0.65, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 12
+  kind: shape
+  data: !Triangle
+    a: { x: -15.0, y: 0.0 }
+    b: { x: 0.0, y: 20.0 }
+    c: { x: 15.0, y: 0.0 }
+
+- entity: 12
+  kind: material
+  data: { color: { r: 100, g: 200, b: 100, a: 255 }, layer: 2, show: true }
+
+- entity: 13
+  kind: transform
+  data: { pos: { x: 550.0, y: 325.0 }, rot_degrees: 35.0 }
+
+- entity: 13
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 13
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.5 }
+
+- entity: 13
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 13
+  kind: surface
+  data: { elast: 0.65, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 13
+  kind: shape
+  data: !Triangle
+    a: { x: -20.0, y: 0.0 }
+    b: { x: 0.0, y: -30.0 }
+    c: { x: 10.0, y: 0.0 }
+
+- entity: 13
+  kind: material
+  data: { color: { r: 100, g: 100, b: 0, a: 255 }, layer: 2, show: true }
+
+- entity: 14
+  kind: transform
+  data: { pos: { x: 500.0, y: 375.0 }, rot_degrees: 0.0 }
+
+- entity: 14
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 14
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.5 }
+
+- entity: 14
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 14
+  kind: surface
+  data: { elast: 0.65, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 14
+  kind: shape
+  data: !Polygon
+    verts:
+      - { x: -30.0, y: 0.0 }
+      - { x: -5.0, y: 15.0 }
+      - { x: 14.0, y: 20.0 }
+      - { x: 30.0, y: 2.0 }
+      - { x: 4.0, y: -13.0 }
+
+- entity: 14
+  kind: material
+  data: { color: { r: 100, g: 100, b: 100, a: 255 }, layer: 2, show: true }
+
+- entity: 15
+  kind: transform
+  data: { pos: { x: 600.0, y: 400.0 }, rot_degrees: 45.0 }
+
+- entity: 15
+  kind: rotation_matrix
+  data: { pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 15
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.5 }
+
+- entity: 15
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 1.0 }
+
+- entity: 15
+  kind: surface
+  data: { elast: 0.9, static_friction: 0.15, kinetic_friction: 0.1 }
+
+- entity: 15
+  kind: shape
+  data: !Polygon
+    verts:
+      - { x: -30.0, y: 5.0 }
+      - { x: -20.0, y: 40.0 }
+      - { x: 0.0, y: 50.0 }
+      - { x: 20.0, y: 5.0 }
+      - { x: 4.0, y: -25.0 }
+
+- entity: 15
+  kind: material
+  data: { color: { r: 125, g: 0, b: 0, a: 255 }, layer: 2, show: true }

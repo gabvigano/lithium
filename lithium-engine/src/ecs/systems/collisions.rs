@@ -1,6 +1,6 @@
 use crate::{
-    core::{error, world::World},
-    ecs::{components, entities},
+    core::error,
+    ecs::{components, entities, world::World},
     math::{self, ApplyMatrix, ToHitBox},
     math::{EPS, EPS_SQR},
 };
@@ -569,26 +569,31 @@ fn generate_swept_shape<'a>(
 }
 
 /// updates 2 entities' linear velocity vector after they collide
-fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: entities::Entity, normal: math::Vec2) {
+fn compute_reaction<const N: usize>(
+    world: &mut World<N>,
+    entity_1: entities::Entity,
+    entity_2: entities::Entity,
+    normal: math::Vec2,
+) {
     // update rest
     if normal.x.abs() <= 0.5 {
         // one is above the other
         if normal.y > 0.0
-            && let Some(translation) = world.translation.get_mut(entity_1)
+            && let Some(translation) = world.engine.translation.get_mut(entity_1)
         {
             translation.rest = true;
         }
 
         if normal.y < 0.0
-            && let Some(translation) = world.translation.get_mut(entity_2)
+            && let Some(translation) = world.engine.translation.get_mut(entity_2)
         {
             translation.rest = true;
         }
     }
 
     // compute elast and friction
-    let surface_1 = world.surface.get(entity_1).expect("missing surface");
-    let surface_2 = world.surface.get(entity_2).expect("missing surface");
+    let surface_1 = world.engine.surface.get(entity_1).expect("missing surface");
+    let surface_2 = world.engine.surface.get(entity_2).expect("missing surface");
 
     let elast = surface_1.elast.min(surface_2.elast);
     let static_friction = (surface_1.static_friction * surface_2.static_friction).sqrt();
@@ -596,12 +601,12 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
 
     // extract lin_vel and inv_mass
     let (lin_vel_1, inv_mass_1) = {
-        let translation = world.translation.get(entity_1).expect("missing translation");
+        let translation = world.engine.translation.get(entity_1).expect("missing translation");
         (translation.lin_vel, translation.inv_mass())
     };
 
     let (lin_vel_2, inv_mass_2) = {
-        if let Some(translation) = world.translation.get(entity_2) {
+        if let Some(translation) = world.engine.translation.get(entity_2) {
             (translation.lin_vel, translation.inv_mass())
         } else {
             (math::Vec2::new(0.0, 0.0), 0.0)
@@ -676,7 +681,7 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
     //
     // so that is the magnitude of delta_lin_vel, the direction is simply the normal direction
 
-    let translation_1 = world.translation.get_mut(entity_1).expect("missing translation");
+    let translation_1 = world.engine.translation.get_mut(entity_1).expect("missing translation");
     translation_1.lin_vel.sub_mut(impulse_vector.scale(inv_mass_1)); // here we subtract the delta_lin_vel (see above why)
 
     // round y linear velocity to 0 for object 1
@@ -687,7 +692,7 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
     // recompute lin_vel_1
     let lin_vel_1 = translation_1.lin_vel;
 
-    let lin_vel_2 = if let Some(translation_2) = world.translation.get_mut(entity_2) {
+    let lin_vel_2 = if let Some(translation_2) = world.engine.translation.get_mut(entity_2) {
         translation_2.lin_vel.add_mut(impulse_vector.scale(inv_mass_2)); // here we add the delta_lin_vel (see above why)
 
         // round y linear velocity to 0 for object 2
@@ -732,24 +737,28 @@ fn compute_reaction(world: &mut World, entity_1: entities::Entity, entity_2: ent
     // compute the dynamic friction impulse
     let friction_impulse_vector = tangent_unit.scale(friction_impulse);
 
-    let translation_1 = world.translation.get_mut(entity_1).expect("missing translation");
+    let translation_1 = world.engine.translation.get_mut(entity_1).expect("missing translation");
     translation_1.lin_vel.sub_mut(friction_impulse_vector.scale(inv_mass_1));
 
-    if let Some(translation_2) = world.translation.get_mut(entity_2) {
+    if let Some(translation_2) = world.engine.translation.get_mut(entity_2) {
         translation_2.lin_vel.add_mut(friction_impulse_vector.scale(inv_mass_2));
     }
 }
 
 /// resolves all collisions for a given object
-fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &Vec<entities::Entity>) -> bool {
+fn resolve_obj_collisions<const N: usize>(
+    world: &mut World<N>,
+    entity_1: entities::Entity,
+    ents: &Vec<entities::Entity>,
+) -> bool {
     let mut solved = true;
 
     // checks entity_1 has all the components necessary for being a dynamic object and extracts its position
     let (Some(&components::Transform { pos: pos_1, .. }), Some(_), Some(_), Some(_)) = (
-        world.transform.get(entity_1),
-        world.translation.get(entity_1),
-        world.surface.get(entity_1),
-        world.shape.get(entity_1),
+        world.engine.transform.get(entity_1),
+        world.engine.translation.get(entity_1),
+        world.engine.surface.get(entity_1),
+        world.engine.shape.get(entity_1),
     ) else {
         // entity is not a dynamic object
         return true; // in this case it counts as solved
@@ -763,16 +772,16 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
 
         // checks entity_2 has all the components necessary for being at least a static object and extracts its position, rotation_matrix and shape
         let (Some(&components::Transform { pos: pos_2, .. }), rot_mat_2, Some(_), Some(shape_2)) = (
-            world.transform.get(entity_2),
-            world.rotation_matrix.get(entity_2),
-            world.surface.get(entity_2),
-            world.shape.get(entity_2),
+            world.engine.transform.get(entity_2),
+            world.engine.rotation_matrix.get(entity_2),
+            world.engine.surface.get(entity_2),
+            world.engine.shape.get(entity_2),
         ) else {
             continue;
         };
 
         // check if entity_2 is dynamic or static and extract its linear velocity
-        let lin_vel_2 = world.translation.get(entity_2).map(|rb| rb.lin_vel);
+        let lin_vel_2 = world.engine.translation.get(entity_2).map(|rb| rb.lin_vel);
 
         let normal = {
             // generate swept_shapes
@@ -781,9 +790,9 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
             // and since we need to pass a mutable reference of world to compute_reaction() and world owns shape_1, we cannot have both a mutable and unmutable reference at the same time;
             // in addition, extract the rotation_matrix
             let (rot_mat_1, &components::Translation { lin_vel: lin_vel_1, .. }, shape_1) = (
-                world.rotation_matrix.get(entity_1),
-                world.translation.get(entity_1).expect("missing translation"),
-                world.shape.get(entity_1).expect("missing shape"),
+                world.engine.rotation_matrix.get(entity_1),
+                world.engine.translation.get(entity_1).expect("missing translation"),
+                world.engine.shape.get(entity_1).expect("missing shape"),
             );
 
             let swept_shape_1 = generate_swept_shape(pos_1, pos_1.add(lin_vel_1), rot_mat_1, shape_1); // we are also recomputing the swept_shape at every iteration since its linear velocity may have changed
@@ -817,15 +826,15 @@ fn resolve_obj_collisions(world: &mut World, entity_1: entities::Entity, ents: &
 }
 
 /// sorts by y all the objects that own a position, from minimum to maximum
-fn sort_objs_by_y(world: &mut World) -> Vec<entities::Entity> {
+fn sort_objs_by_y<const N: usize>(world: &mut World<N>) -> Vec<entities::Entity> {
     // get reference of the transform vector
-    let transform = world.transform.get_ref();
+    let transform = world.engine.transform.get_ref();
 
     // exctract copies of y from each transform
     let ys: Vec<f32> = transform.iter().map(|r| r.pos.y).collect();
 
     // copy entities implementing transform
-    let ents = world.transform.get_ents();
+    let ents = world.engine.transform.get_ents();
 
     // zip vector toghether
     let mut pairs: Vec<(f32, u32)> = ys.into_iter().zip(ents).collect();
@@ -840,13 +849,13 @@ fn sort_objs_by_y(world: &mut World) -> Vec<entities::Entity> {
 }
 
 /// launches resolve_obj_collisions for each object
-pub fn resolve_collisions(world: &mut World, sort: bool, iters: usize) {
+pub fn resolve_collisions<const N: usize>(world: &mut World<N>, sort: bool, iters: usize) {
     let ents = if sort {
         // sort entities by y, with the highest (visually on the screen) being first, in order to optimize computations for objects resting on top of other objects
         // in addition, we can now iterate through this vector instead of calling a method multiple times to get the y
         sort_objs_by_y(world)
     } else {
-        world.transform.get_ents()
+        world.engine.transform.get_ents()
     };
 
     for _ in 0..iters {

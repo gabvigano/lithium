@@ -1,66 +1,104 @@
 use crate::{
-    core::{error, world::World},
-    ecs::{components, entities},
-    math::geometry::Validate,
+    core::error,
+    ecs::{components, entities, world::World},
+    math::{self, geometry::Validate},
 };
 
-pub fn load_static_map(
-    path: &str,
-    world: &mut World,
-    entity_manager: &mut entities::EntityManager,
-) -> Result<Vec<entities::Entity>, error::EngineError> {
-    let data = std::fs::read_to_string(path).map_err(error::FileError::from)?;
-    let specs: Vec<components::StaticSpec> = ron::from_str(&data).map_err(error::FileError::from)?;
-    let mut entities = Vec::with_capacity(specs.len());
+use serde::Deserialize;
+use serde_yaml::Value;
+use std::collections::HashSet;
 
-    for obj in specs {
-        // validate shape before allocating an entity
-        obj.shape.validate()?;
-
-        let entity = entity_manager.create();
-        entities.push(entity);
-
-        let rot_degrees = obj.transform.rot_degrees;
-
-        world.transform.insert(entity, obj.transform.into())?;
-        world
-            .rotation_matrix
-            .insert(entity, obj.rotation_matrix.to_rotation_matrix(rot_degrees))?;
-        world.surface.insert(entity, obj.surface.into())?;
-        world.shape.insert(entity, obj.shape)?;
-        world.material.insert(entity, obj.material.into())?;
-    }
-
-    Ok(entities)
+#[derive(Deserialize, Clone, Debug)]
+pub struct LoadableComponent {
+    pub entity: u32,
+    pub kind: String,
+    pub data: Value,
 }
 
-pub fn load_dynamic_map(
+fn match_engine<const N: usize>(world: &mut World<N>, comp: LoadableComponent) -> Result<(), error::EngineError> {
+    match comp.kind.as_str() {
+        "transform" => {
+            let transform_spec = components::TransformSpec::deserialize(comp.data).map_err(error::FileError::from)?;
+            world.engine.transform.insert(comp.entity, transform_spec.into())?;
+            Ok(())
+        }
+        "rotation_matrix" => {
+            let rot = world
+                .engine
+                .transform
+                .get(comp.entity)
+                .ok_or(error::ComponentError::ComponentNotFound(comp.entity))?
+                .rot;
+            let rot_mat_spec =
+                components::RotationMatrixSpec::deserialize(comp.data).map_err(error::FileError::from)?;
+            world
+                .engine
+                .rotation_matrix
+                .insert(comp.entity, rot_mat_spec.to_rot_mat(rot))?;
+            Ok(())
+        }
+        "translation" => {
+            let translation_spec =
+                components::TranslationSpec::deserialize(comp.data).map_err(error::FileError::from)?;
+            world
+                .engine
+                .translation
+                .insert(comp.entity, translation_spec.try_into()?)?;
+            Ok(())
+        }
+        "rotation" => {
+            let rotation_spec = components::RotationSpec::deserialize(comp.data).map_err(error::FileError::from)?;
+            world.engine.rotation.insert(comp.entity, rotation_spec.try_into()?)?;
+            Ok(())
+        }
+        "surface" => {
+            let surface_spec = components::SurfaceSpec::deserialize(comp.data).map_err(error::FileError::from)?;
+            world.engine.surface.insert(comp.entity, surface_spec.into())?;
+            Ok(())
+        }
+        "shape" => {
+            let shape = math::Shape::deserialize(comp.data).map_err(error::FileError::from)?;
+            shape.validate()?;
+            world.engine.shape.insert(comp.entity, shape)?;
+            Ok(())
+        }
+        "material" => {
+            let material_spec = components::MaterialSpec::deserialize(comp.data).map_err(error::FileError::from)?;
+            world.engine.material.insert(comp.entity, material_spec.into())?;
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+pub fn load<const N: usize>(
     path: &str,
-    world: &mut World,
+    world: &mut World<N>,
     entity_manager: &mut entities::EntityManager,
-) -> Result<Vec<entities::Entity>, error::EngineError> {
-    let data = std::fs::read_to_string(path).map_err(error::FileError::from)?;
-    let specs: Vec<components::DynamicSpec> = ron::from_str(&data).map_err(error::FileError::from)?;
-    let mut entities = Vec::with_capacity(specs.len());
+    match_user_option: Option<fn(&mut World<N>, LoadableComponent) -> Result<(), error::EngineError>>,
+) -> Result<HashSet<entities::Entity>, error::EngineError> {
+    let file = std::fs::read_to_string(path).map_err(error::FileError::from)?;
+    let comps: Vec<LoadableComponent> = serde_yaml::from_str(&file).map_err(error::FileError::from)?;
+    let mut entities = HashSet::with_capacity(comps.len());
 
-    for obj in specs {
-        // validate shape before allocating an entity
-        obj.shape.validate()?;
+    match match_user_option {
+        Some(match_user) => {
+            for comp in comps {
+                entities.insert(comp.entity);
+                match_engine(world, comp.clone())?;
+                match_user(world, comp)?;
+            }
+        }
+        None => {
+            for comp in comps {
+                entities.insert(comp.entity);
+                match_engine(world, comp)?;
+            }
+        }
+    };
 
-        let entity = entity_manager.create();
-        entities.push(entity);
-
-        let rot_degrees = obj.transform.rot_degrees;
-
-        world.transform.insert(entity, obj.transform.into())?;
-        world
-            .rotation_matrix
-            .insert(entity, obj.rotation_matrix.to_rotation_matrix(rot_degrees))?;
-        world.translation.insert(entity, obj.translation.try_into()?)?;
-        world.rotation.insert(entity, obj.rotation.try_into()?)?;
-        world.surface.insert(entity, obj.surface.into())?;
-        world.shape.insert(entity, obj.shape)?;
-        world.material.insert(entity, obj.material.into())?;
+    if let Some(max_entity) = entities.iter().max() {
+        entity_manager.skip_to(max_entity + 1);
     }
 
     Ok(entities)

@@ -7,12 +7,13 @@ pub mod prelude {
     pub use crate::core::debug::*;
     pub use crate::core::error::*;
     pub use crate::core::loader::*;
-    pub use crate::core::world::*;
 
     pub use crate::ecs::components::*;
     pub use crate::ecs::entities::*;
+    pub use crate::ecs::storage::*;
     pub use crate::ecs::systems::collisions::*;
     pub use crate::ecs::systems::dynamics::*;
+    pub use crate::ecs::world::*;
 
     pub use crate::math::*;
 

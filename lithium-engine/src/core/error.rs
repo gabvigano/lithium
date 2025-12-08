@@ -50,7 +50,7 @@ impl From<GeometryError> for EngineError {
 #[derive(Debug)]
 pub enum FileError {
     Load(std::io::Error),
-    Parse(ron::error::SpannedError),
+    Parse(serde_yaml::Error),
 }
 
 impl std::error::Error for FileError {}
@@ -70,16 +70,18 @@ impl From<std::io::Error> for FileError {
     }
 }
 
-impl From<ron::error::SpannedError> for FileError {
-    fn from(e: ron::error::SpannedError) -> Self {
+impl From<serde_yaml::Error> for FileError {
+    fn from(e: serde_yaml::Error) -> Self {
         Self::Parse(e)
     }
 }
 
 #[derive(Debug)]
 pub enum ComponentError {
-    MissingComponent(entities::Entity),
-    AlreadyExistingComponent(entities::Entity),
+    ComponentOutOfRange(usize),
+    MismatchingComponent(),
+    ComponentNotFound(entities::Entity),
+    DuplicateComponent(entities::Entity),
 }
 
 impl std::error::Error for ComponentError {}
@@ -87,10 +89,16 @@ impl std::error::Error for ComponentError {}
 impl fmt::Display for ComponentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ComponentError::MissingComponent(entity) => {
+            ComponentError::ComponentOutOfRange(index) => {
+                write!(f, "no component exists for index {index}")
+            }
+            ComponentError::MismatchingComponent() => {
+                write!(f, "tried to downcast to a mismatching type")
+            }
+            ComponentError::ComponentNotFound(entity) => {
                 write!(f, "component not found for entity {entity}")
             }
-            ComponentError::AlreadyExistingComponent(entity) => {
+            ComponentError::DuplicateComponent(entity) => {
                 write!(f, "component already defined for entity {entity}")
             }
         }

@@ -1,9 +1,14 @@
 use crate::{core::error, math};
 
 use serde::Deserialize;
-use std::fmt;
+use std::{any::Any, fmt};
 
 pub static IDENTITY_ROTATION_MATRIX: RotationMatrix = RotationMatrix::identity();
+
+pub trait UserComponent: Any + 'static {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
 
 #[derive(Deserialize)]
 pub struct TransformSpec {
@@ -63,12 +68,12 @@ pub struct RotationMatrixSpec {
 
 impl RotationMatrixSpec {
     #[inline]
-    pub fn to_rotation_matrix(&self, rot_degrees: f32) -> RotationMatrix {
-        let radians = math::Radians::from_degrees(rot_degrees).norm();
+    pub fn to_rot_mat(&self, rot: math::Radians) -> RotationMatrix {
+        rot.norm();
 
         RotationMatrix::new(
-            math::Mat2x3::from_rot_and_pivot(radians, self.pivot),
-            math::Mat2x3::from_rot_and_pivot(radians, self.pivot),
+            math::Mat2x3::from_rot_and_pivot(rot, self.pivot),
+            math::Mat2x3::from_rot_and_pivot(rot, self.pivot),
         )
     }
 }
@@ -487,24 +492,4 @@ impl From<MaterialSpec> for Material {
     fn from(spec: MaterialSpec) -> Self {
         Self::new(spec.color, spec.layer, spec.show)
     }
-}
-
-#[derive(Deserialize)]
-pub struct StaticSpec {
-    pub transform: TransformSpec,
-    pub rotation_matrix: RotationMatrixSpec,
-    pub surface: SurfaceSpec,
-    pub shape: math::Shape,
-    pub material: MaterialSpec,
-}
-
-#[derive(Deserialize)]
-pub struct DynamicSpec {
-    pub transform: TransformSpec,
-    pub rotation_matrix: RotationMatrixSpec,
-    pub translation: TranslationSpec,
-    pub rotation: RotationSpec,
-    pub surface: SurfaceSpec,
-    pub shape: math::Shape,
-    pub material: MaterialSpec,
 }
