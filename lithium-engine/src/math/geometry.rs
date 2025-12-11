@@ -644,6 +644,11 @@ impl Quad {
     }
 
     #[inline]
+    pub fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Self {
+        Self { a, b, c, d }
+    }
+
+    #[inline]
     pub fn a(&self) -> math::Vec2 {
         self.a
     }
@@ -768,6 +773,11 @@ impl Polygon {
         polygon.validate()?;
 
         Ok(polygon)
+    }
+
+    #[inline]
+    pub fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
+        Self { verts }
     }
 
     #[inline]

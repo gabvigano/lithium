@@ -367,8 +367,7 @@ fn check_collision(swept_shape_1: &math::SweptShape, swept_shape_2: &math::Swept
 
 /// generates a convex hull from a vector of points using monotone chain algorithm
 pub fn convex_hull(mut verts: Vec<math::Vec2>) -> Result<math::Polygon, error::GeometryError> {
-    // precheck for an early return if too few vertices are given, although this check will be
-    // performed automatically when calling components::Polygon::new() at the end of this function
+    // precheck for an early return if too few vertices are given
     if verts.len() < 3 {
         return Err(error::GeometryError::TooFewVertices(verts.len()));
     }
@@ -409,7 +408,7 @@ pub fn convex_hull(mut verts: Vec<math::Vec2>) -> Result<math::Polygon, error::G
     // concat
     bottom_boundary.extend(top_boundary);
 
-    math::Polygon::new(bottom_boundary)
+    Ok(math::Polygon::new_unchecked(bottom_boundary))
 }
 
 /// generates a swept shape from a stationary or moving shape

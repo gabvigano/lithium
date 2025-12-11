@@ -177,7 +177,7 @@ async fn main() {
             // update world and camera
             prelude::update_lin_vel(&mut world);
             prelude::reset_rest(&mut world);
-            prelude::resolve_collisions(&mut world, true, 8);
+            prelude::resolve_collisions(&mut world, true, 7);
             prelude::update_pos(&mut world);
 
             camera.update(world.engine().transform.get(player).expect("missing transform").pos());
