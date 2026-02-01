@@ -3,7 +3,8 @@ use std::fmt;
 
 pub const EPS: f32 = 1e-6;
 pub const EPS_SQR: f32 = EPS * EPS;
-pub static IDENTITY_MAT2X3: Mat2x3 = Mat2x3::identity();
+pub const ZERO_VEC2: Vec2 = Vec2::zero();
+pub const IDENTITY_MAT2X3: Mat2x3 = Mat2x3::identity();
 
 #[inline(always)]
 pub fn pow2(x: f32) -> f32 {
@@ -40,6 +41,11 @@ impl Vec2 {
     #[inline]
     pub fn approx_equal(self, vec2: Self) -> bool {
         (self.x - vec2.x).abs() <= EPS && (self.y - vec2.y).abs() <= EPS
+    }
+
+    #[inline]
+    pub fn approx_equal_zero(self) -> bool {
+        self.x.abs() <= EPS && self.y.abs() <= EPS
     }
 
     #[inline]
@@ -305,6 +311,16 @@ impl Mat2x3 {
             && (self.y.1 - mat2.y.1).abs() <= EPS
             && (self.z.0 - mat2.z.0).abs() <= EPS
             && (self.z.1 - mat2.z.1).abs() <= EPS
+    }
+
+    #[inline]
+    pub fn approx_equal_identity(&self) -> bool {
+        (self.x.0 - 1.0).abs() <= EPS
+            && self.x.1.abs() <= EPS
+            && self.y.0.abs() <= EPS
+            && (self.y.1 - 1.0).abs() <= EPS
+            && self.z.0.abs() <= EPS
+            && self.z.1.abs() <= EPS
     }
 
     #[inline]

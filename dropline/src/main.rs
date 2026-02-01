@@ -177,7 +177,7 @@ async fn main() {
             // update world and camera
             prelude::update_lin_vel(&mut world);
             prelude::reset_rest(&mut world);
-            prelude::resolve_collisions(&mut world, true, 7);
+            prelude::resolve_collisions(&mut world, 7);
             prelude::update_pos(&mut world);
 
             camera.update(world.engine().transform.get(player).expect("missing transform").pos());
@@ -250,10 +250,12 @@ async fn main() {
         // );
 
         if !pause {
-            prelude::swap_rotation_matrices(&mut world);
+            prelude::swap_rot_mat(&mut world);
         }
 
-        // std::thread::sleep(std::time::Duration::from_millis(300));
+        // std::thread::sleep(std::time::Duration::from_millis(50));
+        // println!("\n\nFRAME ENDED, PRESS ENTER TO CONTINUE\n\n");
+        // std::io::stdin().read_line(&mut String::new()).expect("failed to read");
         mq_prelude::next_frame().await;
     }
 }

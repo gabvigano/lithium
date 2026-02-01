@@ -12,6 +12,7 @@ pub struct SparseSet<T> {
 }
 
 impl<T> SparseSet<T> {
+    #[inline]
     pub fn new() -> Self {
         Self {
             components: Vec::new(),
@@ -20,6 +21,7 @@ impl<T> SparseSet<T> {
         }
     }
 
+    #[inline]
     pub fn insert(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
         let index = self.components.len();
         let sparse_id = entity as usize;
@@ -40,6 +42,7 @@ impl<T> SparseSet<T> {
         Ok(())
     }
 
+    #[inline]
     pub fn remove(&mut self, entity: entities::Entity) -> Option<T> {
         let sparse_id = entity as usize;
         let index = self.sparse.get_mut(sparse_id)?.take()?;
@@ -60,6 +63,7 @@ impl<T> SparseSet<T> {
         removed
     }
 
+    #[inline]
     pub fn set(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
         let sparse_id = entity as usize;
         let index = *self
@@ -73,28 +77,72 @@ impl<T> SparseSet<T> {
         Ok(())
     }
 
+    #[inline]
     pub fn get(&self, entity: entities::Entity) -> Option<&T> {
         let sparse_id = entity as usize;
         self.sparse.get(sparse_id)?.map(|index| &self.components[index])
     }
 
+    #[inline]
     pub fn get_mut(&mut self, entity: entities::Entity) -> Option<&mut T> {
         let sparse_id = entity as usize;
         self.sparse.get(sparse_id)?.map(|index| &mut self.components[index])
     }
 
+    #[inline]
+    pub fn get2(&self, entity_1: entities::Entity, entity_2: entities::Entity) -> (Option<&T>, Option<&T>) {
+        if entity_1 == entity_2 {
+            return (None, None);
+        }
+
+        (self.get(entity_1), self.get(entity_2))
+    }
+
+    #[inline]
+    pub fn get2_mut(
+        &mut self,
+        entity_1: entities::Entity,
+        entity_2: entities::Entity,
+    ) -> (Option<&mut T>, Option<&mut T>) {
+        if entity_1 == entity_2 {
+            return (None, None);
+        }
+
+        let index_1 = self.sparse.get(entity_1 as usize).and_then(|x| *x);
+        let index_2 = self.sparse.get(entity_2 as usize).and_then(|x| *x);
+
+        match (index_1, index_2) {
+            (None, None) => (None, None),
+            (Some(index), None) => (self.components.get_mut(index), None),
+            (None, Some(index)) => (None, self.components.get_mut(index)),
+            (Some(index_1), Some(index_2)) => {
+                if index_1 < index_2 {
+                    let (left, right) = self.components.split_at_mut(index_2);
+                    (Some(&mut left[index_1]), Some(&mut right[0]))
+                } else {
+                    let (left, right) = self.components.split_at_mut(index_1);
+                    (Some(&mut right[0]), Some(&mut left[index_2]))
+                }
+            }
+        }
+    }
+
+    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (entities::Entity, &T)> {
         self.entities.iter().cloned().zip(self.components.iter())
     }
 
+    #[inline]
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (entities::Entity, &mut T)> {
         self.entities.iter().cloned().zip(self.components.iter_mut())
     }
 
+    #[inline]
     pub fn get_ents(&self) -> Vec<entities::Entity> {
         self.entities.clone()
     }
 
+    #[inline]
     pub fn get_ref(&self) -> &Vec<T> {
         &self.components
     }
@@ -109,17 +157,22 @@ pub trait ErasedStorage: 'static {
 }
 
 impl<T: components::UserComponent> ErasedStorage for SparseSet<T> {
+    #[inline]
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    #[inline]
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
+    #[inline]
     fn get_any(&self, entity: entities::Entity) -> Option<&dyn Any> {
         self.get(entity).map(|c| c as &dyn Any)
     }
 
+    #[inline]
     fn get_any_mut(&mut self, entity: entities::Entity) -> Option<&mut dyn Any> {
         self.get_mut(entity).map(|c| c as &mut dyn Any)
     }

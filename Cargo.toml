@@ -1,3 +1,10 @@
 [workspace]
 resolver = "3"
 members = ["lithium-engine", "dropline"]
+
+[profile.release]
+opt-level = 3
+strip = "symbols"
+lto = "fat"
+panic = "abort"
+codegen-units = 1

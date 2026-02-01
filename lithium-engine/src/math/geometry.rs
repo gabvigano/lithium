@@ -1,4 +1,7 @@
-use crate::{core::error, math};
+use crate::{
+    core::error,
+    math::{self, Vec2},
+};
 
 use serde::Deserialize;
 use std::fmt;
@@ -20,6 +23,49 @@ impl HitBox {
             max_x,
             max_y,
         }
+    }
+
+    #[inline]
+    pub fn from_verts_array<const N: usize>(verts: &[math::Vec2; N]) -> Self {
+        // initialize extremes
+        let first = verts[0];
+
+        let mut min_x = first.x;
+        let mut min_y = first.y;
+        let mut max_x = first.x;
+        let mut max_y = first.y;
+
+        // update extremes (skip first element since the extremes were initialized to that)
+        for i in 1..N {
+            let vert = verts[i];
+            min_x = min_x.min(vert.x);
+            min_y = min_y.min(vert.y);
+            max_x = max_x.max(vert.x);
+            max_y = max_y.max(vert.y);
+        }
+
+        Self::new(min_x, min_y, max_x, max_y)
+    }
+
+    #[inline]
+    pub fn from_verts_slice(verts: &[math::Vec2]) -> Self {
+        // initialize extremes
+        let first = verts[0];
+
+        let mut min_x = first.x;
+        let mut min_y = first.y;
+        let mut max_x = first.x;
+        let mut max_y = first.y;
+
+        // update extremes (skip first element since the extremes were initialized to that)
+        for vert in &verts[1..] {
+            min_x = min_x.min(vert.x);
+            min_y = min_y.min(vert.y);
+            max_x = max_x.max(vert.x);
+            max_y = max_y.max(vert.y);
+        }
+
+        Self::new(min_x, min_y, max_x, max_y)
     }
 
     #[inline]
@@ -95,16 +141,35 @@ pub trait Validate {
     fn validate(&self) -> Result<(), error::GeometryError>;
 }
 
-pub trait ApplyGlobalPos {
-    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError>
-    where
-        Self: Sized;
+pub trait ApplyTransformationVerts {
+    type Output;
+    fn apply_vec2(&self, vec: math::Vec2) -> Self::Output;
+    fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output;
+    fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output;
 }
 
-pub trait ApplyMatrix {
-    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+pub trait ApplyTransformationVertsStep {
+    type Output;
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output;
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output;
+    fn apply_mat2x3_then_vec2_step(
+        &self,
+        vec_1: math::Vec2,
+        vec_2: math::Vec2,
+        mat_1: &math::Mat2x3,
+        mat_2: &math::Mat2x3,
+    ) -> Self::Output;
+}
+
+pub trait ApplyTransformationShape {
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
     where
         Self: Sized;
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self;
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized;
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self;
 }
 
 pub trait ToHitBox {
@@ -112,37 +177,23 @@ pub trait ToHitBox {
 }
 
 #[derive(Clone, Debug)]
-pub enum SweptShape<'a> {
-    Unchanged {
-        shape: &'a Shape,
-        pos: math::Vec2,
-        rot_mat: Option<math::Mat2x3>,
-    },
-    Changed {
-        swept: Polygon,
-    },
+pub enum SweptShape {
+    Unchanged(Shape),
+    Changed(Polygon),
 }
 
-impl ToHitBox for SweptShape<'_> {
-    fn to_hitbox(&self) -> HitBox {
+impl SweptShape {
+    #[inline]
+    pub fn sides(&self) -> usize {
         match self {
-            SweptShape::Unchanged { shape, pos, rot_mat } => {
-                // this is a local position, global position must be added
-                // we also need to apply the rotation if it exists since it is not already encoded
-                if let Some(rot_mat) = rot_mat {
-                    shape
-                        .apply_matrix(rot_mat)
-                        .expect("invalid geometry")
-                        .to_hitbox()
-                        .add_pos(*pos)
-                } else {
-                    shape.to_hitbox().add_pos(*pos)
-                }
-            }
-            SweptShape::Changed { swept } => {
-                // this is already a global position and already encodes the rotation
-                swept.to_hitbox()
-            }
+            SweptShape::Unchanged(shape) => match shape {
+                Shape::Segment(_) => 1,
+                Shape::Triangle(_) => 3,
+                Shape::Quad(_) => 4,
+                Shape::Polygon(polygon) => polygon.verts.len(),
+                Shape::Circle(_) => unimplemented!(),
+            },
+            SweptShape::Changed(polygon) => polygon.verts.len(),
         }
     }
 }
@@ -171,29 +222,49 @@ impl Validate for Shape {
     }
 }
 
-impl ApplyGlobalPos for Shape {
+impl ApplyTransformationShape for Shape {
     #[inline]
-    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError> {
         Ok(match self {
-            Shape::Segment(segment) => Shape::Segment(segment.apply_global_pos(glob_pos)?),
-            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_global_pos(glob_pos)?),
-            Shape::Quad(quad) => Shape::Quad(quad.apply_global_pos(glob_pos)?),
-            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_global_pos(glob_pos)?),
+            Shape::Segment(segment) => Shape::Segment(segment.apply_vec2_checked(vec)?),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_vec2_checked(vec)?),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_vec2_checked(vec)?),
+            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_vec2_checked(vec)?),
             Shape::Circle(_) => unimplemented!(),
         })
     }
-}
 
-impl ApplyMatrix for Shape {
     #[inline]
-    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self {
+        match self {
+            Shape::Segment(segment) => Shape::Segment(segment.apply_vec2_unchecked(vec)),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_vec2_unchecked(vec)),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_vec2_unchecked(vec)),
+            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_vec2_unchecked(vec)),
+            Shape::Circle(_) => unimplemented!(),
+        }
+    }
+
+    #[inline]
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
         Ok(match self {
-            Shape::Segment(segment) => Shape::Segment(segment.apply_matrix(mat)?),
-            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_matrix(mat)?),
-            Shape::Quad(quad) => Shape::Quad(quad.apply_matrix(mat)?),
-            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_matrix(mat)?),
+            Shape::Segment(segment) => Shape::Segment(segment.apply_mat2x3_checked(mat)?),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_mat2x3_checked(mat)?),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_mat2x3_checked(mat)?),
+            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_mat2x3_checked(mat)?),
             Shape::Circle(_) => unimplemented!(),
         })
+    }
+
+    #[inline]
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
+        match self {
+            Shape::Segment(segment) => Shape::Segment(segment.apply_mat2x3_unchecked(mat)),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_mat2x3_unchecked(mat)),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_mat2x3_unchecked(mat)),
+            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_mat2x3_unchecked(mat)),
+            Shape::Circle(_) => unimplemented!(),
+        }
     }
 }
 
@@ -237,6 +308,11 @@ impl Segment {
         segment.validate()?;
 
         Ok(segment)
+    }
+
+    #[inline]
+    pub fn new_unchecked(a: math::Vec2, b: math::Vec2) -> Self {
+        Self { a, b }
     }
 
     #[inline]
@@ -319,29 +395,97 @@ impl Validate for Segment {
     }
 }
 
-impl ApplyGlobalPos for Segment {
+impl ApplyTransformationVerts for Segment {
+    type Output = [Vec2; 2];
+
     #[inline]
-    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
-        Self::new(glob_pos.add(self.a), glob_pos.add(self.b))
+    fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
+        [self.a.add(vec), self.b.add(vec)]
+    }
+
+    #[inline]
+    fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output {
+        [mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b)]
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output {
+        [mat.pre_mul_vec2(self.a).add(vec), mat.pre_mul_vec2(self.b).add(vec)]
     }
 }
 
-impl ApplyMatrix for Segment {
+impl ApplyTransformationVertsStep for Segment {
+    type Output = [Vec2; 4];
+
     #[inline]
-    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+        [
+            self.a.add(vec_1),
+            self.b.add(vec_1),
+            self.a.add(vec_2),
+            self.b.add(vec_2),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+        [
+            mat_1.pre_mul_vec2(self.a),
+            mat_1.pre_mul_vec2(self.b),
+            mat_2.pre_mul_vec2(self.a),
+            mat_2.pre_mul_vec2(self.b),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_step(
+        &self,
+        vec_1: math::Vec2,
+        vec_2: math::Vec2,
+        mat_1: &math::Mat2x3,
+        mat_2: &math::Mat2x3,
+    ) -> Self::Output {
+        [
+            mat_1.pre_mul_vec2(self.a).add(vec_1),
+            mat_1.pre_mul_vec2(self.b).add(vec_1),
+            mat_2.pre_mul_vec2(self.a).add(vec_2),
+            mat_2.pre_mul_vec2(self.b).add(vec_2),
+        ]
+    }
+}
+
+impl ApplyTransformationShape for Segment {
+    #[inline]
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
+        Self::new(self.a.add(vec), self.b.add(vec))
+    }
+
+    #[inline]
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self {
+        Self::new_unchecked(self.a.add(vec), self.b.add(vec))
+    }
+
+    #[inline]
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
         Self::new(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
+    }
+
+    #[inline]
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
     }
 }
 
 impl ToHitBox for Segment {
     #[inline]
     fn to_hitbox(&self) -> HitBox {
-        let min_x = self.a.x.min(self.b.x);
-        let min_y = self.a.y.min(self.b.y);
-        let max_x = self.a.x.max(self.b.x);
-        let max_y = self.a.y.max(self.b.y);
-
-        HitBox::new(min_x, min_y, max_x, max_y)
+        HitBox::from_verts_array(&[self.a, self.b])
     }
 }
 
@@ -480,6 +624,11 @@ impl Triangle {
     }
 
     #[inline]
+    pub fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Self {
+        Self { a, b, c }
+    }
+
+    #[inline]
     pub fn a(&self) -> math::Vec2 {
         self.a
     }
@@ -525,17 +674,108 @@ impl Validate for Triangle {
     }
 }
 
-impl ApplyGlobalPos for Triangle {
+impl ApplyTransformationVerts for Triangle {
+    type Output = [Vec2; 3];
+
     #[inline]
-    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
-        Self::new(glob_pos.add(self.a), glob_pos.add(self.b), glob_pos.add(self.c))
+    fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
+        [self.a.add(vec), self.b.add(vec), self.c.add(vec)]
+    }
+
+    #[inline]
+    fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output {
+        [
+            mat.pre_mul_vec2(self.a),
+            mat.pre_mul_vec2(self.b),
+            mat.pre_mul_vec2(self.c),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output {
+        [
+            mat.pre_mul_vec2(self.a).add(vec),
+            mat.pre_mul_vec2(self.b).add(vec),
+            mat.pre_mul_vec2(self.c).add(vec),
+        ]
     }
 }
 
-impl ApplyMatrix for Triangle {
+impl ApplyTransformationVertsStep for Triangle {
+    type Output = [Vec2; 6];
+
     #[inline]
-    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+        [
+            self.a.add(vec_1),
+            self.b.add(vec_1),
+            self.c.add(vec_1),
+            self.a.add(vec_2),
+            self.b.add(vec_2),
+            self.c.add(vec_2),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+        [
+            mat_1.pre_mul_vec2(self.a),
+            mat_1.pre_mul_vec2(self.b),
+            mat_1.pre_mul_vec2(self.c),
+            mat_2.pre_mul_vec2(self.a),
+            mat_2.pre_mul_vec2(self.b),
+            mat_2.pre_mul_vec2(self.c),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_step(
+        &self,
+        vec_1: math::Vec2,
+        vec_2: math::Vec2,
+        mat_1: &math::Mat2x3,
+        mat_2: &math::Mat2x3,
+    ) -> Self::Output {
+        [
+            mat_1.pre_mul_vec2(self.a).add(vec_1),
+            mat_1.pre_mul_vec2(self.b).add(vec_1),
+            mat_1.pre_mul_vec2(self.c).add(vec_1),
+            mat_2.pre_mul_vec2(self.a).add(vec_2),
+            mat_2.pre_mul_vec2(self.b).add(vec_2),
+            mat_2.pre_mul_vec2(self.c).add(vec_2),
+        ]
+    }
+}
+
+impl ApplyTransformationShape for Triangle {
+    #[inline]
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
+        Self::new(self.a.add(vec), self.b.add(vec), self.c.add(vec))
+    }
+
+    #[inline]
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self {
+        Self::new_unchecked(self.a.add(vec), self.b.add(vec), self.c.add(vec))
+    }
+
+    #[inline]
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
         Self::new(
+            mat.pre_mul_vec2(self.a),
+            mat.pre_mul_vec2(self.b),
+            mat.pre_mul_vec2(self.c),
+        )
+    }
+
+    #[inline]
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(
             mat.pre_mul_vec2(self.a),
             mat.pre_mul_vec2(self.b),
             mat.pre_mul_vec2(self.c),
@@ -546,12 +786,7 @@ impl ApplyMatrix for Triangle {
 impl ToHitBox for Triangle {
     #[inline]
     fn to_hitbox(&self) -> HitBox {
-        let min_x = self.a.x.min(self.b.x.min(self.c.x));
-        let min_y = self.a.y.min(self.b.y.min(self.c.y));
-        let max_x = self.a.x.max(self.b.x.max(self.c.x));
-        let max_y = self.a.y.max(self.b.y.max(self.c.y));
-
-        HitBox::new(min_x, min_y, max_x, max_y)
+        HitBox::from_verts_array(&[self.a, self.b, self.c])
     }
 }
 
@@ -716,22 +951,117 @@ impl Validate for Quad {
     }
 }
 
-impl ApplyGlobalPos for Quad {
+impl ApplyTransformationVerts for Quad {
+    type Output = [Vec2; 4];
+
     #[inline]
-    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
-        Self::new(
-            glob_pos.add(self.a),
-            glob_pos.add(self.b),
-            glob_pos.add(self.c),
-            glob_pos.add(self.d),
-        )
+    fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
+        [self.a.add(vec), self.b.add(vec), self.c.add(vec), self.d.add(vec)]
+    }
+
+    #[inline]
+    fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output {
+        [
+            mat.pre_mul_vec2(self.a),
+            mat.pre_mul_vec2(self.b),
+            mat.pre_mul_vec2(self.c),
+            mat.pre_mul_vec2(self.d),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output {
+        [
+            mat.pre_mul_vec2(self.a).add(vec),
+            mat.pre_mul_vec2(self.b).add(vec),
+            mat.pre_mul_vec2(self.c).add(vec),
+            mat.pre_mul_vec2(self.d).add(vec),
+        ]
     }
 }
 
-impl ApplyMatrix for Quad {
+impl ApplyTransformationVertsStep for Quad {
+    type Output = [Vec2; 8];
+
     #[inline]
-    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+        [
+            self.a.add(vec_1),
+            self.b.add(vec_1),
+            self.c.add(vec_1),
+            self.d.add(vec_1),
+            self.a.add(vec_2),
+            self.b.add(vec_2),
+            self.c.add(vec_2),
+            self.d.add(vec_2),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+        [
+            mat_1.pre_mul_vec2(self.a),
+            mat_1.pre_mul_vec2(self.b),
+            mat_1.pre_mul_vec2(self.c),
+            mat_1.pre_mul_vec2(self.d),
+            mat_2.pre_mul_vec2(self.a),
+            mat_2.pre_mul_vec2(self.b),
+            mat_2.pre_mul_vec2(self.c),
+            mat_2.pre_mul_vec2(self.d),
+        ]
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_step(
+        &self,
+        vec_1: math::Vec2,
+        vec_2: math::Vec2,
+        mat_1: &math::Mat2x3,
+        mat_2: &math::Mat2x3,
+    ) -> Self::Output {
+        [
+            mat_1.pre_mul_vec2(self.a).add(vec_1),
+            mat_1.pre_mul_vec2(self.b).add(vec_1),
+            mat_1.pre_mul_vec2(self.c).add(vec_1),
+            mat_1.pre_mul_vec2(self.d).add(vec_1),
+            mat_2.pre_mul_vec2(self.a).add(vec_2),
+            mat_2.pre_mul_vec2(self.b).add(vec_2),
+            mat_2.pre_mul_vec2(self.c).add(vec_2),
+            mat_2.pre_mul_vec2(self.d).add(vec_2),
+        ]
+    }
+}
+
+impl ApplyTransformationShape for Quad {
+    #[inline]
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
+        Self::new(self.a.add(vec), self.b.add(vec), self.c.add(vec), self.d.add(vec))
+    }
+
+    #[inline]
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self {
+        Self::new_unchecked(self.a.add(vec), self.b.add(vec), self.c.add(vec), self.d.add(vec))
+    }
+
+    #[inline]
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
         Self::new(
+            mat.pre_mul_vec2(self.a),
+            mat.pre_mul_vec2(self.b),
+            mat.pre_mul_vec2(self.c),
+            mat.pre_mul_vec2(self.d),
+        )
+    }
+
+    #[inline]
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(
             mat.pre_mul_vec2(self.a),
             mat.pre_mul_vec2(self.b),
             mat.pre_mul_vec2(self.c),
@@ -743,12 +1073,7 @@ impl ApplyMatrix for Quad {
 impl ToHitBox for Quad {
     #[inline]
     fn to_hitbox(&self) -> HitBox {
-        let min_x = self.a.x.min(self.b.x.min(self.c.x.min(self.d.x)));
-        let min_y = self.a.y.min(self.b.y.min(self.c.y.min(self.d.y)));
-        let max_x = self.a.x.max(self.b.x.max(self.c.x.max(self.d.x)));
-        let max_y = self.a.y.max(self.b.y.max(self.c.y.max(self.d.y)));
-
-        HitBox::new(min_x, min_y, max_x, max_y)
+        HitBox::from_verts_array(&[self.a, self.b, self.c, self.d])
     }
 }
 
@@ -833,38 +1158,121 @@ impl Validate for Polygon {
     }
 }
 
-impl ApplyGlobalPos for Polygon {
+impl ApplyTransformationVerts for Polygon {
+    type Output = Vec<Vec2>;
+
     #[inline]
-    fn apply_global_pos(&self, glob_pos: math::Vec2) -> Result<Self, error::GeometryError> {
-        Self::new(self.verts().into_iter().map(|v| glob_pos.add(*v)).collect())
+    fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(vert.add(vec));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat.pre_mul_vec2(*vert));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat.pre_mul_vec2(*vert).add(vec));
+        }
+
+        verts
     }
 }
 
-impl ApplyMatrix for Polygon {
+impl ApplyTransformationVertsStep for Polygon {
+    type Output = Vec<Vec2>;
+
     #[inline]
-    fn apply_matrix(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(vert.add(vec_1));
+            verts.push(vert.add(vec_2));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat_1.pre_mul_vec2(*vert));
+            verts.push(mat_2.pre_mul_vec2(*vert));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_step(
+        &self,
+        vec_1: math::Vec2,
+        vec_2: math::Vec2,
+        mat_1: &math::Mat2x3,
+        mat_2: &math::Mat2x3,
+    ) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat_1.pre_mul_vec2(*vert).add(vec_1));
+            verts.push(mat_2.pre_mul_vec2(*vert).add(vec_2));
+        }
+
+        verts
+    }
+}
+
+impl ApplyTransformationShape for Polygon {
+    #[inline]
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
+        Self::new(self.verts().into_iter().map(|v| vec.add(*v)).collect())
+    }
+
+    #[inline]
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self {
+        Self::new_unchecked(self.verts().into_iter().map(|v| vec.add(*v)).collect())
+    }
+
+    #[inline]
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    where
+        Self: Sized,
+    {
         Self::new(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect())
+    }
+
+    #[inline]
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect())
     }
 }
 
 impl ToHitBox for Polygon {
     #[inline]
     fn to_hitbox(&self) -> HitBox {
-        // initialize extremes
-        let mut min_x = f32::MAX;
-        let mut min_y = f32::MAX;
-        let mut max_x = f32::MIN;
-        let mut max_y = f32::MIN;
-
-        // update extremes
-        for vert in &self.verts {
-            min_x = min_x.min(vert.x);
-            min_y = min_y.min(vert.y);
-            max_x = max_x.max(vert.x);
-            max_y = max_y.max(vert.y);
-        }
-
-        HitBox::new(min_x, min_y, max_x, max_y)
+        HitBox::from_verts_slice(&self.verts)
     }
 }
 

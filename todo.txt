@@ -57,6 +57,9 @@
 
 [x] change validate() for each shape into a trait
 
+# collisions
+[ ] solve tunneling (during collision resolution the shortest path to push the entities away will be chosen, even if it causes tunneling)
+
 # physics
 [ ] support physical rotation (so angular velocity and acceleration...)
 

@@ -45,7 +45,33 @@ pub fn update_lin_vel<const N: usize>(world: &mut World<N>) {
 }
 
 #[inline]
-pub fn swap_rotation_matrices<const N: usize>(world: &mut World<N>) {
+pub fn update_rot_mat<const N: usize>(
+    world: &mut World<N>,
+    entity: entities::Entity,
+    delta_rot: math::Radians,
+    pivot: math::Vec2,
+) -> bool {
+    let Some(rot_mat) = world.engine_mut().rotation_matrix.get_mut(entity) else {
+        return false;
+    };
+
+    if !rot_mat.update(delta_rot, pivot) {
+        return false;
+    }
+
+    let Some(transform) = world.engine_mut().transform.get_mut(entity) else {
+        return false;
+    };
+
+    // update transform.rot and normalize
+    transform.rot.0 += delta_rot.0;
+    transform.rot.norm();
+
+    true
+}
+
+#[inline]
+pub fn swap_rot_mat<const N: usize>(world: &mut World<N>) {
     for (_, rotation_matrix) in world.engine.rotation_matrix.iter_mut() {
         rotation_matrix.swap();
     }

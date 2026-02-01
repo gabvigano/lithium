@@ -3,7 +3,7 @@ use crate::{core::error, math};
 use serde::Deserialize;
 use std::{any::Any, fmt};
 
-pub static IDENTITY_ROTATION_MATRIX: RotationMatrix = RotationMatrix::identity();
+pub const IDENTITY_ROTATION_MATRIX: RotationMatrix = RotationMatrix::identity();
 
 pub trait UserComponent: Any + 'static {
     fn as_any(&self) -> &dyn Any;
@@ -145,21 +145,24 @@ impl RotationMatrix {
     }
 
     #[inline]
-    pub fn update(&mut self, transform: &mut Transform, delta_rot: math::Radians, pivot: math::Vec2) {
+    pub fn curr_approx_equal_prev(&self) -> bool {
+        self.curr.approx_equal(&self.prev)
+    }
+
+    #[inline]
+    pub fn update(&mut self, delta_rot: math::Radians, pivot: math::Vec2) -> bool {
         if delta_rot.0.abs() <= math::EPS {
             // early return deltas close to 0
-            return;
+            return false;
         }
-
-        // update transform.rot and normalize
-        transform.rot.0 += delta_rot.0;
-        transform.rot.norm();
 
         // compute the transformation for this rotation
         let transformation = math::Mat2x3::from_rot_and_pivot(delta_rot, pivot);
 
         // apply the rotation to the current rotation matrix
         self.curr.pre_mul_mut(&transformation);
+
+        true
     }
 
     #[inline]

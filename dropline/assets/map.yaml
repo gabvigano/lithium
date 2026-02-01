@@ -2,7 +2,7 @@
 
 - entity: 0
   kind: transform
-  data: { pos: { x: 625.0, y: 100.0 }, rot_degrees: 0.0 }
+  data: { pos: { x: 625.0, y: 300.0 }, rot_degrees: 0.0 }
 
 - entity: 0
   kind: rotation_matrix
@@ -34,7 +34,7 @@
 
 - entity: 1
   kind: transform
-  data: { pos: { x: 0.0, y: 500.0 }, rot_degrees: 15.0 }
+  data: { pos: { x: 0.0, y: 500.0 }, rot_degrees: 0.0 }
 
 - entity: 1
   kind: rotation_matrix
