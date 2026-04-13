@@ -141,6 +141,10 @@ pub trait Validate {
     fn validate(&self) -> Result<(), error::GeometryError>;
 }
 
+pub trait Centroid {
+    fn centroid(&self) -> math::Vec2;
+}
+
 pub trait ApplyTransformationVerts {
     type Output;
     fn apply_vec2(&self, vec: math::Vec2) -> Self::Output;
@@ -219,6 +223,19 @@ impl Validate for Shape {
         };
 
         Ok(())
+    }
+}
+
+impl Centroid for Shape {
+    #[inline]
+    fn centroid(&self) -> math::Vec2 {
+        match self {
+            Shape::Segment(segment) => segment.centroid(),
+            Shape::Triangle(triangle) => triangle.centroid(),
+            Shape::Quad(quad) => quad.centroid(),
+            Shape::Polygon(polygon) => polygon.centroid(),
+            Shape::Circle(_) => unimplemented!(),
+        }
     }
 }
 
@@ -336,6 +353,11 @@ impl Segment {
     }
 
     #[inline]
+    pub fn get_vec2(&self) -> math::Vec2 {
+        self.b.sub(self.a)
+    }
+
+    #[inline]
     pub fn eval_x(&self, x: f32) -> Option<f32> {
         if x < self.a.x.min(self.b.x) - math::EPS || x > self.a.x.max(self.b.x) + math::EPS {
             // out of range
@@ -392,6 +414,13 @@ impl Validate for Segment {
         };
 
         Ok(())
+    }
+}
+
+impl Centroid for Segment {
+    #[inline]
+    fn centroid(&self) -> math::Vec2 {
+        self.a.add(self.b).scale(0.5)
     }
 }
 
@@ -674,6 +703,13 @@ impl Validate for Triangle {
     }
 }
 
+impl Centroid for Triangle {
+    #[inline]
+    fn centroid(&self) -> math::Vec2 {
+        self.a.add(self.b.add(self.c)).scale(1.0 / 3.0)
+    }
+}
+
 impl ApplyTransformationVerts for Triangle {
     type Output = [Vec2; 3];
 
@@ -951,6 +987,13 @@ impl Validate for Quad {
     }
 }
 
+impl Centroid for Quad {
+    #[inline]
+    fn centroid(&self) -> math::Vec2 {
+        self.a.add(self.b.add(self.c.add(self.d))).scale(0.25)
+    }
+}
+
 impl ApplyTransformationVerts for Quad {
     type Output = [Vec2; 4];
 
@@ -1155,6 +1198,17 @@ impl Validate for Polygon {
         }
 
         Ok(())
+    }
+}
+
+impl Centroid for Polygon {
+    #[inline]
+    fn centroid(&self) -> math::Vec2 {
+        let mut sum = math::Vec2::new(0.0, 0.0);
+        for vert in &self.verts {
+            sum.add_mut(*vert);
+        }
+        sum.scale(1.0 / self.verts.len() as f32)
     }
 }
 

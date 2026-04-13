@@ -195,6 +195,11 @@ impl Vec2 {
     }
 
     #[inline]
+    pub fn cross_scalar(self, scalar: f32) -> Self {
+        Self::new(-scalar * self.y, scalar * self.x)
+    }
+
+    #[inline]
     pub fn signed_area(self, q: Self, r: Self) -> f32 {
         (q.sub(self)).cross(r.sub(self))
     }
@@ -222,6 +227,11 @@ impl Vec2 {
     #[inline]
     pub fn square_mag(self) -> f32 {
         pow2(self.x) + pow2(self.y)
+    }
+
+    #[inline]
+    pub fn midpoint(self, point: Self) -> Self {
+        self.add(point).scale(0.5)
     }
 }
 
@@ -389,6 +399,11 @@ impl Radians {
     pub fn norm(mut self) -> Self {
         self.0 = self.0.rem_euclid(std::f32::consts::TAU);
         self
+    }
+
+    #[inline]
+    pub fn norm_mut(&mut self) {
+        self.0 = self.0.rem_euclid(std::f32::consts::TAU);
     }
 }
 

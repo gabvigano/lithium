@@ -1,7 +1,6 @@
 use crate::{
     core::error,
     ecs::{components, storage},
-    math,
     prelude::SparseSet,
 };
 
@@ -56,7 +55,7 @@ pub struct EngineComponents {
     pub translation: storage::SparseSet<components::Translation>,
     pub rotation: storage::SparseSet<components::Rotation>,
     pub surface: storage::SparseSet<components::Surface>,
-    pub shape: storage::SparseSet<math::Shape>,
+    pub body: storage::SparseSet<components::Body>,
     pub material: storage::SparseSet<components::Material>,
 }
 
@@ -69,7 +68,7 @@ impl EngineComponents {
             translation: storage::SparseSet::new(),
             rotation: storage::SparseSet::new(),
             surface: storage::SparseSet::new(),
-            shape: storage::SparseSet::new(),
+            body: storage::SparseSet::new(),
             material: storage::SparseSet::new(),
         }
     }

@@ -7,7 +7,7 @@ use macroquad::prelude as mq_prelude;
 
 use std::{collections::HashSet, fmt::Write};
 
-const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.25 };
+const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
 
 // this is an example of how to define a custom component, how to add it to the world, how to access its SparseSet and how to attach it to an entity using the map file
 //
@@ -177,8 +177,9 @@ async fn main() {
             // update world and camera
             prelude::update_lin_vel(&mut world);
             prelude::reset_rest(&mut world);
-            prelude::resolve_collisions(&mut world, 7);
+            prelude::resolve_collisions(&mut world, 10);
             prelude::update_pos(&mut world);
+            prelude::update_rot_mat(&mut world);
 
             camera.update(world.engine().transform.get(player).expect("missing transform").pos());
         }
@@ -229,8 +230,8 @@ async fn main() {
         );
         _ = write!(
             msg,
-            "player_shape: {}\n",
-            world.engine().shape.get(player).expect("missing shape")
+            "player_body: {}\n",
+            world.engine().body.get(player).expect("missing body")
         );
         _ = write!(
             msg,
@@ -248,10 +249,6 @@ async fn main() {
         //     mq_prelude::RED,
         //     false,
         // );
-
-        if !pause {
-            prelude::swap_rot_mat(&mut world);
-        }
 
         // std::thread::sleep(std::time::Duration::from_millis(50));
         // println!("\n\nFRAME ENDED, PRESS ENTER TO CONTINUE\n\n");

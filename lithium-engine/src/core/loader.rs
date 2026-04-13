@@ -1,7 +1,7 @@
 use crate::{
     core::error,
     ecs::{components, entities, world::World},
-    math::{self, geometry::Validate},
+    math::geometry::Validate,
 };
 
 use serde::Deserialize;
@@ -23,18 +23,12 @@ fn match_engine<const N: usize>(world: &mut World<N>, comp: LoadableComponent) -
             Ok(())
         }
         "rotation_matrix" => {
-            let rot = world
-                .engine
-                .transform
-                .get(comp.entity)
-                .ok_or(error::ComponentError::ComponentNotFound(comp.entity))?
-                .rot;
             let rot_mat_spec =
                 components::RotationMatrixSpec::deserialize(comp.data).map_err(error::FileError::from)?;
             world
                 .engine
                 .rotation_matrix
-                .insert(comp.entity, rot_mat_spec.to_rot_mat(rot))?;
+                .insert(comp.entity, rot_mat_spec.to_rot_mat())?;
             Ok(())
         }
         "translation" => {
@@ -56,10 +50,11 @@ fn match_engine<const N: usize>(world: &mut World<N>, comp: LoadableComponent) -
             world.engine.surface.insert(comp.entity, surface_spec.into())?;
             Ok(())
         }
-        "shape" => {
-            let shape = math::Shape::deserialize(comp.data).map_err(error::FileError::from)?;
-            shape.validate()?;
-            world.engine.shape.insert(comp.entity, shape)?;
+        "body" => {
+            let body_spec = components::BodySpec::deserialize(comp.data).map_err(error::FileError::from)?;
+            let body: components::Body = body_spec.into();
+            body.shape().validate()?;
+            world.engine.body.insert(comp.entity, body)?;
             Ok(())
         }
         "material" => {

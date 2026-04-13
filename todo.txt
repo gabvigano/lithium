@@ -61,9 +61,13 @@
 [ ] solve tunneling (during collision resolution the shortest path to push the entities away will be chosen, even if it causes tunneling)
 
 # physics
-[ ] support physical rotation (so angular velocity and acceleration...)
+[x] support physical rotation (so angular velocity and acceleration...)
+
+# collisions
+[ ] positional correction
 
 # system update
+[ ] hot reloading for map.yaml
 [ ] support circles
 
 # rendering

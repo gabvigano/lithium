@@ -45,35 +45,13 @@ pub fn update_lin_vel<const N: usize>(world: &mut World<N>) {
 }
 
 #[inline]
-pub fn update_rot_mat<const N: usize>(
-    world: &mut World<N>,
-    entity: entities::Entity,
-    delta_rot: math::Radians,
-    pivot: math::Vec2,
-) -> bool {
-    let Some(rot_mat) = world.engine_mut().rotation_matrix.get_mut(entity) else {
-        return false;
-    };
-
-    if !rot_mat.update(delta_rot, pivot) {
-        return false;
-    }
-
-    let Some(transform) = world.engine_mut().transform.get_mut(entity) else {
-        return false;
-    };
-
-    // update transform.rot and normalize
-    transform.rot.0 += delta_rot.0;
-    transform.rot.norm();
-
-    true
-}
-
-#[inline]
-pub fn swap_rot_mat<const N: usize>(world: &mut World<N>) {
-    for (_, rotation_matrix) in world.engine.rotation_matrix.iter_mut() {
-        rotation_matrix.swap();
+pub fn update_rot_mat<const N: usize>(world: &mut World<N>) {
+    for (entity, rot_mat) in world.engine.rotation_matrix.iter_mut() {
+        if let Some(components::Rotation { ang_vel, .. }) = world.engine.rotation.get(entity)
+            && let Some(components::Body { centroid, .. }) = world.engine.body.get(entity)
+        {
+            _ = rot_mat.update_mut(math::Radians(*ang_vel), rot_mat.rot_mat.pre_mul_vec2(*centroid));
+        }
     }
 }
 
@@ -143,4 +121,22 @@ pub fn apply_force<const N: usize>(
     translation.force.add_mut(new_force);
 
     Some(())
+}
+
+#[inline]
+pub fn apply_rot<const N: usize>(
+    world: &mut World<N>,
+    entity: entities::Entity,
+    delta_rot: math::Radians,
+    pivot: math::Vec2,
+) -> bool {
+    let Some(rot_mat) = world.engine.rotation_matrix.get_mut(entity) else {
+        return false;
+    };
+
+    if !rot_mat.update_mut(delta_rot, pivot) {
+        return false;
+    }
+
+    true
 }

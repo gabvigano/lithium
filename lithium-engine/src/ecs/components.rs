@@ -1,4 +1,7 @@
-use crate::{core::error, math};
+use crate::{
+    core::error,
+    math::{self, Centroid},
+};
 
 use serde::Deserialize;
 use std::{any::Any, fmt};
@@ -13,19 +16,17 @@ pub trait UserComponent: Any + 'static {
 #[derive(Deserialize)]
 pub struct TransformSpec {
     pub pos: math::Vec2,
-    pub rot_degrees: f32,
 }
 
 #[derive(Clone, Debug)]
 pub struct Transform {
     pub(crate) pos: math::Vec2,
-    pub(crate) rot: math::Radians,
 }
 
 impl Transform {
     #[inline]
-    pub fn new(pos: math::Vec2, rot: math::Radians) -> Self {
-        Self { pos, rot }
+    pub fn new(pos: math::Vec2) -> Self {
+        Self { pos }
     }
 
     #[inline]
@@ -34,123 +35,102 @@ impl Transform {
     }
 
     #[inline]
-    pub fn rot(&self) -> math::Radians {
-        self.rot
-    }
-
-    #[inline]
     pub fn set_pos(&mut self, new_pos: math::Vec2) {
         self.pos = new_pos
-    }
-
-    #[inline]
-    pub fn set_rot(&mut self, new_rot: math::Radians) {
-        self.rot = new_rot
     }
 }
 
 impl fmt::Display for Transform {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "transform (pos: {}, rot: {})", self.pos, self.rot)
+        write!(f, "transform (pos: {})", self.pos)
     }
 }
 
 impl From<TransformSpec> for Transform {
     fn from(spec: TransformSpec) -> Self {
-        Self::new(spec.pos, math::Radians::from_degrees(spec.rot_degrees))
+        Self::new(spec.pos)
     }
 }
 
 #[derive(Deserialize)]
 pub struct RotationMatrixSpec {
+    pub rot_degrees: f32,
     pub pivot: math::Vec2,
 }
 
 impl RotationMatrixSpec {
     #[inline]
-    pub fn to_rot_mat(&self, rot: math::Radians) -> RotationMatrix {
-        rot.norm();
+    pub fn to_rot_mat(&self) -> RotationMatrix {
+        let mut rot = math::Radians::from_degrees(self.rot_degrees);
+        rot.norm_mut();
 
-        RotationMatrix::new(
-            math::Mat2x3::from_rot_and_pivot(rot, self.pivot),
-            math::Mat2x3::from_rot_and_pivot(rot, self.pivot),
-        )
+        RotationMatrix::new(math::Mat2x3::from_rot_and_pivot(rot, self.pivot))
     }
 }
 
 #[derive(Clone, Debug)]
 pub struct RotationMatrix {
-    pub(crate) prev: math::Mat2x3,
-    pub(crate) curr: math::Mat2x3,
+    pub(crate) rot_mat: math::Mat2x3,
 }
 
 impl RotationMatrix {
     #[inline]
-    pub fn new(prev: math::Mat2x3, curr: math::Mat2x3) -> Self {
-        Self { prev, curr }
+    pub fn new(rot_mat: math::Mat2x3) -> Self {
+        Self { rot_mat }
     }
 
     #[inline]
     pub const fn zero() -> Self {
         Self {
-            prev: math::Mat2x3::zero(),
-            curr: math::Mat2x3::zero(),
+            rot_mat: math::Mat2x3::zero(),
         }
     }
 
     #[inline]
     pub const fn one() -> Self {
         Self {
-            prev: math::Mat2x3::one(),
-            curr: math::Mat2x3::one(),
+            rot_mat: math::Mat2x3::one(),
         }
     }
 
     #[inline]
     pub const fn identity() -> Self {
         Self {
-            prev: math::Mat2x3::identity(),
-            curr: math::Mat2x3::identity(),
+            rot_mat: math::Mat2x3::identity(),
         }
     }
 
     #[inline]
-    pub fn get_prev(&self) -> &math::Mat2x3 {
-        &self.prev
+    pub fn get_rot_mat(&self) -> &math::Mat2x3 {
+        &self.rot_mat
     }
 
     #[inline]
-    pub fn get_prev_mut(&mut self) -> &mut math::Mat2x3 {
-        &mut self.prev
+    pub fn get_rot_mat_mut(&mut self) -> &mut math::Mat2x3 {
+        &mut self.rot_mat
     }
 
     #[inline]
-    pub fn get_curr(&self) -> &math::Mat2x3 {
-        &self.curr
+    pub fn set_rot_mat(&mut self, new_mat: math::Mat2x3) {
+        self.rot_mat = new_mat;
     }
 
     #[inline]
-    pub fn get_curr_mut(&mut self) -> &mut math::Mat2x3 {
-        &mut self.curr
+    pub fn update(&self, delta_rot: math::Radians, pivot: math::Vec2) -> Self {
+        if delta_rot.0.abs() <= math::EPS {
+            // early return deltas close to 0
+            return self.clone();
+        }
+
+        // compute the transformation for this rotation
+        let transformation = math::Mat2x3::from_rot_and_pivot(delta_rot, pivot);
+
+        // apply the rotation to the rotation matrix
+        Self::new(self.rot_mat.pre_mul(&transformation))
     }
 
     #[inline]
-    pub fn set_prev(&mut self, new_mat: math::Mat2x3) {
-        self.prev = new_mat;
-    }
-
-    #[inline]
-    pub fn set_curr(&mut self, new_mat: math::Mat2x3) {
-        self.curr = new_mat;
-    }
-
-    #[inline]
-    pub fn curr_approx_equal_prev(&self) -> bool {
-        self.curr.approx_equal(&self.prev)
-    }
-
-    #[inline]
-    pub fn update(&mut self, delta_rot: math::Radians, pivot: math::Vec2) -> bool {
+    pub fn update_mut(&mut self, delta_rot: math::Radians, pivot: math::Vec2) -> bool {
         if delta_rot.0.abs() <= math::EPS {
             // early return deltas close to 0
             return false;
@@ -159,21 +139,16 @@ impl RotationMatrix {
         // compute the transformation for this rotation
         let transformation = math::Mat2x3::from_rot_and_pivot(delta_rot, pivot);
 
-        // apply the rotation to the current rotation matrix
-        self.curr.pre_mul_mut(&transformation);
+        // apply the rotation to the rotation matrix
+        self.rot_mat.pre_mul_mut(&transformation);
 
         true
-    }
-
-    #[inline]
-    pub fn swap(&mut self) {
-        self.prev = self.curr.clone();
     }
 }
 
 impl fmt::Display for RotationMatrix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "rotation_matrix (prev: {}, curr: {})", self.prev, self.curr)
+        write!(f, "rotation_matrix (rot_mat: {})", self.rot_mat)
     }
 }
 
@@ -427,6 +402,53 @@ impl fmt::Display for Surface {
 impl From<SurfaceSpec> for Surface {
     fn from(spec: SurfaceSpec) -> Self {
         Self::new(spec.elast, spec.static_friction, spec.kinetic_friction)
+    }
+}
+
+#[derive(Deserialize)]
+pub struct BodySpec {
+    pub shape: math::Shape,
+}
+
+#[derive(Clone, Debug)]
+pub struct Body {
+    pub(crate) shape: math::Shape,
+    pub(crate) centroid: math::Vec2,
+}
+
+impl Body {
+    #[inline]
+    pub fn new(shape: math::Shape) -> Self {
+        let centroid = shape.centroid();
+        Self { shape, centroid }
+    }
+
+    #[inline]
+    pub fn shape(&self) -> &math::Shape {
+        &self.shape
+    }
+
+    #[inline]
+    pub fn centroid(&self) -> math::Vec2 {
+        self.centroid
+    }
+
+    #[inline]
+    pub fn set_shape(&mut self, new_shape: math::Shape) {
+        self.shape = new_shape;
+        self.centroid = self.shape.centroid()
+    }
+}
+
+impl fmt::Display for Body {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "body (shape: {}, centroid: {})", self.shape, self.centroid)
+    }
+}
+
+impl From<BodySpec> for Body {
+    fn from(spec: BodySpec) -> Self {
+        Self::new(spec.shape)
     }
 }
 

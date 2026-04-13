@@ -47,14 +47,17 @@ impl<T> SparseSet<T> {
         let sparse_id = entity as usize;
         let index = self.sparse.get_mut(sparse_id)?.take()?;
 
-        // swap the last item with the one to remove
         let last_index = self.components.len() - 1;
-        self.components.swap(index, last_index);
-        self.entities.swap(index, last_index);
 
-        // update the sparse index of the moved entity
-        let moved_entity = self.entities[index];
-        self.sparse[moved_entity as usize] = Some(index);
+        if index != last_index {
+            // swap the last item with the one to remove
+            self.components.swap(index, last_index);
+            self.entities.swap(index, last_index);
+
+            // update the sparse index of the moved entity
+            let moved_entity = self.entities[index];
+            self.sparse[moved_entity as usize] = Some(index);
+        }
 
         // remove the entity to remove and return the associated component
         self.entities.pop();

@@ -38,7 +38,7 @@ pub fn render<const N: usize>(world: &World<N>, camera: &scene::Camera) {
             let Some(&components::Transform { pos, .. }) = world.engine.transform.get(entity) else {
                 continue;
             };
-            let Some(shape) = world.engine.shape.get(entity) else {
+            let Some(body) = world.engine.body.get(entity) else {
                 continue;
             };
 
@@ -49,10 +49,10 @@ pub fn render<const N: usize>(world: &World<N>, camera: &scene::Camera) {
             let rot_mat = if rot_mat_is_none {
                 &algebra::IDENTITY_MAT2X3
             } else {
-                &rot_mat.unwrap().curr
+                &rot_mat.unwrap().rot_mat
             };
 
-            match shape {
+            match body.shape() {
                 math::Shape::Segment(segment) => {
                     let (a, b) = if rot_mat_is_none {
                         (pos.add(segment.a), pos.add(segment.b))
@@ -147,7 +147,7 @@ pub fn render<const N: usize>(world: &World<N>, camera: &scene::Camera) {
                 math::Shape::Circle(_) => {
                     unimplemented!();
                     // mq_prelude::draw_circle(
-                    //     pos.x + circle.radius - cam_x, // sum radius because macroquad use centre for circles instead of top left
+                    //     pos.x + circle.radius - cam_x, // sum radius because macroquad use center for circles instead of top left
                     //     pos.y + circle.radius - cam_y,
                     //     circle.radius,
                     //     color,
