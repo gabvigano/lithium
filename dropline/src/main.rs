@@ -1,17 +1,14 @@
-use lithium_engine::{
-    ecs::entities,
-    prelude::{self, World},
-};
+use lithium_engine::prelude;
 
 use macroquad::prelude as mq_prelude;
 
-use std::{collections::HashSet, fmt::Write};
+use std::fmt::Write;
 
 const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
 
 // this is an example of how to define a custom component, how to add it to the world, how to access its SparseSet and how to attach it to an entity using the map file
 //
-// 1) first we define our component struct
+// 1) first we define our component struct (careful not to use an already existing component name, otherwise the loader overwrite the existing component)
 // use serde::Deserialize;
 //
 // const EXAMPLECOMPONENT: usize = 0; // this is not strictly necessary, but it is much easier than remembering the id of every custom component
@@ -57,19 +54,21 @@ const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
 //
 // note that "example_component" only needs to be the same here and in step 6.2
 //
-// 6.2) create a match function for the loader with this signature
-// fn match_engine<const N: usize>(
+// 6.2) create a match_user_upsert function and a match_user_remove function for the loader with these signatures
+// fn match_user_upsert<const N: usize>(
 //     world: &mut World<N>,
-//     comp: prelude::LoadableComponent,
+//     entity: prelude::Entity,
+//     kind: &str,
+//     data: serde_yaml::Value,
 // ) -> Result<(), prelude::EngineError> {
-//     match comp.kind.as_str() {
+//     match kind {
 //         "example_component" => {
-//             let example_component = ExampleComponent::deserialize(comp.data).map_err(prelude::FileError::from)?;
+//             let example_component = ExampleComponent::deserialize(data).map_err(prelude::FileError::from)?;
 //             world
 //                 .user_mut()
 //                 .get_mut::<ExampleComponent>(EXAMPLECOMPONENT)
 //                 .unwrap()
-//                 .insert(comp.entity, example_component.into())?;
+//                 .insert(entity, example_component.into())?;
 //             Ok(())
 //         }
 //         other custom components if needed...
@@ -77,9 +76,22 @@ const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
 //     }
 // }
 //
-// 6.3) pass the match function to the loader by changing this line
-// - prelude::load("assets/map.yaml", world, entity_manager, None).unwrap()
-// + prelude::load("assets/map.yaml", world, entity_manager, Some(match_engine)).unwrap()
+// fn match_user_remove<const N: usize>(world: &mut World<N>, entity: prelude::Entity, kind: &str) {
+// match kind {
+//     "example_component" => {
+//         world
+//              .user_mut()
+//              .get_mut::<ExampleComponent>(EXAMPLECOMPONENT)
+//              .unwrap()
+//              .remove(entity);
+//     }
+//
+// 6.3) pass the match functions to the loader by changing this line
+// - let mut map_cache = prelude::load(map_path, &mut world, &mut entity_manager, None).unwrap();
+// + let mut map_cache = prelude::load(map_path, &mut world, &mut entity_manager, Some(match_user_upsert)).unwrap();
+//
+// - prelude::new_loader::hot_reload(&mut map_cache, &mut world, &mut entity_manager, None, None)
+// + prelude::new_loader::hot_reload(&mut map_cache, &mut world, &mut entity_manager, Some(match_user_upsert), Some(match_user_remove))
 
 fn get_window_config() -> mq_prelude::Conf {
     mq_prelude::Conf {
@@ -95,13 +107,6 @@ fn init_world() -> prelude::World<0> {
     prelude::World::default()
 }
 
-fn load_map<const N: usize>(
-    world: &mut World<N>,
-    entity_manager: &mut entities::EntityManager,
-) -> HashSet<entities::Entity> {
-    prelude::load("assets/map.yaml", world, entity_manager, None).unwrap()
-}
-
 #[macroquad::main(get_window_config())]
 async fn main() {
     println!(
@@ -115,7 +120,8 @@ async fn main() {
     let mut world = init_world();
 
     // load game map
-    let _map = load_map(&mut world, &mut entity_manager);
+    let map_path = "assets/map.yaml";
+    let mut map_cache = prelude::load(map_path, &mut world, &mut entity_manager, None).unwrap();
 
     // create player
     let player = 0;
@@ -123,13 +129,26 @@ async fn main() {
     // create camera
     let mut camera = prelude::Camera::new(
         prelude::Vec2::new(0.0, -100.0),
-        prelude::Rect::new(mq_prelude::screen_width(), mq_prelude::screen_height()).unwrap(),
+        prelude::Rect::new(mq_prelude::screen_width(), mq_prelude::screen_height()).expect("error creating camera"),
     );
+
+    let mut frame_idx = 1;
+    let hot_reload_frames = 10;
 
     // game loop
     loop {
         // empty frame
         mq_prelude::clear_background(mq_prelude::BLACK);
+
+        // reload
+        if frame_idx == hot_reload_frames {
+            if let Err(err) = prelude::hot_reload(&mut map_cache, &mut world, &mut entity_manager, None, None) {
+                println!("error hot reloading: {err}")
+            }
+            frame_idx = 1;
+        } else {
+            frame_idx += 1;
+        }
 
         if !pause {
             // reset force
@@ -160,7 +179,7 @@ async fn main() {
                 world = init_world();
 
                 // load game map
-                let _map = load_map(&mut world, &mut entity_manager);
+                map_cache = prelude::load(map_path, &mut world, &mut entity_manager, None).unwrap();
             }
         }
         if mq_prelude::is_key_down(mq_prelude::KeyCode::P) {
@@ -199,45 +218,34 @@ async fn main() {
         let mut msg = String::new();
         _ = write!(msg, "pause: {}\n\n", pause);
         _ = write!(msg, "player_id: {}\n", player);
-        _ = write!(
-            msg,
-            "player_transform: {}\n",
-            world.engine().transform.get(player).expect("missing transform")
-        );
-        _ = write!(
-            msg,
-            "player_translation: {}\n",
-            world.engine().translation.get(player).expect("missing translation")
-        );
-        _ = write!(
-            msg,
-            "player_rotation: {}\n",
-            world.engine().rotation.get(player).expect("missing rotation")
-        );
-        _ = write!(
-            msg,
-            "player_rotation_matrix: {}\n",
-            world
-                .engine()
-                .rotation_matrix
-                .get(player)
-                .expect("missing rotation_matrix")
-        );
-        _ = write!(
-            msg,
-            "player_surface: {}\n",
-            world.engine().surface.get(player).expect("missing surface")
-        );
-        _ = write!(
-            msg,
-            "player_body: {}\n",
-            world.engine().body.get(player).expect("missing body")
-        );
-        _ = write!(
-            msg,
-            "player_material: {}\n",
-            world.engine().material.get(player).expect("missing material")
-        );
+        match world.engine().transform.get(player) {
+            Some(component) => _ = write!(msg, "player_transform: {}\n", component),
+            None => (),
+        }
+        match world.engine().translation.get(player) {
+            Some(component) => _ = write!(msg, "player_translation: {}\n", component),
+            None => (),
+        }
+        match world.engine().rotation.get(player) {
+            Some(component) => _ = write!(msg, "player_rotation: {}\n", component),
+            None => (),
+        }
+        match world.engine().rotation_matrix.get(player) {
+            Some(component) => _ = write!(msg, "player_rotation_matrix: {}\n", component),
+            None => (),
+        }
+        match world.engine().surface.get(player) {
+            Some(component) => _ = write!(msg, "player_surface: {}\n", component),
+            None => (),
+        }
+        match world.engine().body.get(player) {
+            Some(component) => _ = write!(msg, "player_body: {}\n", component),
+            None => (),
+        }
+        match world.engine().material.get(player) {
+            Some(component) => _ = write!(msg, "player_material: {}\n", component),
+            None => (),
+        }
 
         mq_prelude::draw_multiline_text(&msg, 20.0, 25.0, 16.0, None, mq_prelude::WHITE);
 

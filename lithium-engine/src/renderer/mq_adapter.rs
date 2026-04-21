@@ -20,20 +20,20 @@ pub fn color_to_mq(color: math::Color) -> mq_prelude::Color {
 
 pub fn render<const N: usize>(world: &World<N>, camera: &scene::Camera) {
     // get reference of the material vector
-    let mats = world.engine.material.get_ref();
+    let mats = world.engine.material.get_comps();
 
     // copy entities implementing material
     let ents = world.engine.material.get_ents();
 
     // zip vector toghether
-    let mut pairs: Vec<(&components::Material, u32)> = mats.iter().zip(ents).collect();
+    let mut pairs: Vec<(&components::Material, &u32)> = mats.iter().zip(ents).collect();
 
     // sort by layer
     pairs.sort_by_key(|(m, _)| m.layer);
 
     let math::Vec2 { x: cam_x, y: cam_y } = camera.pos();
 
-    for (material, entity) in pairs {
+    for (material, &entity) in pairs {
         if material.show {
             let Some(&components::Transform { pos, .. }) = world.engine.transform.get(entity) else {
                 continue;

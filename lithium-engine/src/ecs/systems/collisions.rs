@@ -1259,14 +1259,26 @@ pub fn resolve_collisions<const N: usize>(world: &mut World<N>, iters: usize) {
             let entity_1 = ents[idx_1];
             let mut entity_1_is_far = true;
 
-            let (&components::Transform { pos: pos_1, .. }, rot_mat_1, mut lin_vel_1, mut ang_vel_1, surface_1, body_1) = (
-                world.engine.transform.get(entity_1).expect("missing transform"),
+            let (pos_1, rot_mat_1, mut lin_vel_1, mut ang_vel_1, surface_1, body_1) = (
+                world.engine.transform.get(entity_1).map(|t| t.pos), // extract pos
                 world.engine.rotation_matrix.get(entity_1),
                 world.engine.translation.get(entity_1).map(|t| t.lin_vel), // extract lin_vel
                 world.engine.rotation.get(entity_1).map(|t| t.ang_vel),    // extract ang_vel
-                world.engine.surface.get(entity_1).expect("missing surface"),
-                world.engine.body.get(entity_1).expect("missing body"),
+                world.engine.surface.get(entity_1),
+                world.engine.body.get(entity_1),
             );
+
+            let Some(pos_1) = pos_1 else {
+                continue 'loop_1;
+            };
+
+            let Some(surface_1) = surface_1 else {
+                continue 'loop_1;
+            };
+
+            let Some(body_1) = body_1 else {
+                continue 'loop_1;
+            };
 
             // initialize hitbox and swept shape cache
             let mut hitbox_1 = Some(compute_hitbox(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1));
@@ -1296,14 +1308,26 @@ pub fn resolve_collisions<const N: usize>(world: &mut World<N>, iters: usize) {
 
                 let entity_2 = ents[idx_2];
 
-                let (&components::Transform { pos: pos_2, .. }, rot_mat_2, lin_vel_2, ang_vel_2, surface_2, body_2) = (
-                    world.engine.transform.get(entity_2).expect("missing transform"),
+                let (pos_2, rot_mat_2, lin_vel_2, ang_vel_2, surface_2, body_2) = (
+                    world.engine.transform.get(entity_2).map(|t| t.pos), // extract pos
                     world.engine.rotation_matrix.get(entity_2),
                     world.engine.translation.get(entity_2).map(|t| t.lin_vel), // extract lin_vel
                     world.engine.rotation.get(entity_2).map(|t| t.ang_vel),    // extract ang_vel
-                    world.engine.surface.get(entity_2).expect("missing surface"),
-                    world.engine.body.get(entity_2).expect("missing body"),
+                    world.engine.surface.get(entity_2),
+                    world.engine.body.get(entity_2),
                 );
+
+                let Some(pos_2) = pos_2 else {
+                    continue 'loop_2;
+                };
+
+                let Some(surface_2) = surface_2 else {
+                    continue 'loop_2;
+                };
+
+                let Some(body_2) = body_2 else {
+                    continue 'loop_2;
+                };
 
                 // broad phase
                 if hitbox_1.is_none() {

@@ -5,6 +5,10 @@ use crate::{
 
 use std::any::Any;
 
+/// sparseset storage for components of type T:
+/// - components[dense] stores the component value
+/// - entities[dense] stores the entity that owns components[dense]
+/// - sparse[entity] stores Some(dense) if that entity has a component, otherwise None
 pub struct SparseSet<T> {
     components: Vec<T>,
     entities: Vec<entities::Entity>,
@@ -22,74 +26,94 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn insert(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
-        let index = self.components.len();
-        let sparse_id = entity as usize;
+    fn ensure_sparse_idx(&mut self, entity: entities::Entity) -> usize {
+        let sparse_idx = entity as usize;
 
-        // ensure self.sparse is long enough
-        if sparse_id >= self.sparse.len() {
-            self.sparse.resize(sparse_id + 1, None);
+        if sparse_idx >= self.sparse.len() {
+            self.sparse.resize(sparse_idx + 1, None);
         }
 
-        if self.sparse[sparse_id].is_some() {
-            return Err(error::ComponentError::DuplicateComponent(entity));
-        }
+        sparse_idx
+    }
+
+    #[inline]
+    fn dense_idx(&self, entity: entities::Entity) -> Option<usize> {
+        self.sparse.get(entity as usize).and_then(|slot| *slot)
+    }
+
+    #[inline]
+    fn push_new(&mut self, entity: entities::Entity, component: T) {
+        let sparse_idx = self.ensure_sparse_idx(entity);
+        let dense_idx = self.components.len();
 
         self.components.push(component);
         self.entities.push(entity);
-        self.sparse[sparse_id] = Some(index);
+        self.sparse[sparse_idx] = Some(dense_idx);
+    }
 
+    #[inline]
+    pub fn insert(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
+        let sparse_idx = self.ensure_sparse_idx(entity);
+
+        if self.sparse[sparse_idx].is_some() {
+            return Err(error::ComponentError::DuplicateComponent(entity));
+        }
+
+        self.push_new(entity, component);
+        Ok(())
+    }
+
+    #[inline]
+    pub fn upsert(&mut self, entity: entities::Entity, component: T) {
+        match self.sparse.get(entity as usize).and_then(|slot| *slot) {
+            Some(dense_idx) => {
+                self.components[dense_idx] = component;
+            }
+            None => {
+                self.push_new(entity, component);
+            }
+        }
+    }
+
+    #[inline]
+    pub fn update(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
+        let dense_idx = self
+            .dense_idx(entity)
+            .ok_or(error::ComponentError::ComponentNotFound(entity))?;
+
+        self.components[dense_idx] = component;
         Ok(())
     }
 
     #[inline]
     pub fn remove(&mut self, entity: entities::Entity) -> Option<T> {
-        let sparse_id = entity as usize;
-        let index = self.sparse.get_mut(sparse_id)?.take()?;
+        let sparse_idx = entity as usize;
+        let dense_idx = self.sparse.get_mut(sparse_idx)?.take()?;
 
-        let last_index = self.components.len() - 1;
+        let last_dense_idx = self.components.len() - 1;
 
-        if index != last_index {
-            // swap the last item with the one to remove
-            self.components.swap(index, last_index);
-            self.entities.swap(index, last_index);
+        if dense_idx != last_dense_idx {
+            self.components.swap(dense_idx, last_dense_idx);
+            self.entities.swap(dense_idx, last_dense_idx);
 
-            // update the sparse index of the moved entity
-            let moved_entity = self.entities[index];
-            self.sparse[moved_entity as usize] = Some(index);
+            let moved_entity = self.entities[dense_idx];
+            self.sparse[moved_entity as usize] = Some(dense_idx);
         }
 
-        // remove the entity to remove and return the associated component
         self.entities.pop();
-        let removed = self.components.pop();
-
-        removed
-    }
-
-    #[inline]
-    pub fn set(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
-        let sparse_id = entity as usize;
-        let index = *self
-            .sparse
-            .get_mut(sparse_id)
-            .ok_or(error::ComponentError::ComponentNotFound(entity))?
-            .as_ref()
-            .ok_or(error::ComponentError::ComponentNotFound(entity))?;
-
-        self.components[index] = component;
-        Ok(())
+        self.components.pop()
     }
 
     #[inline]
     pub fn get(&self, entity: entities::Entity) -> Option<&T> {
-        let sparse_id = entity as usize;
-        self.sparse.get(sparse_id)?.map(|index| &self.components[index])
+        let dense_idx = self.dense_idx(entity)?;
+        self.components.get(dense_idx)
     }
 
     #[inline]
     pub fn get_mut(&mut self, entity: entities::Entity) -> Option<&mut T> {
-        let sparse_id = entity as usize;
-        self.sparse.get(sparse_id)?.map(|index| &mut self.components[index])
+        let dense_idx = self.dense_idx(entity)?;
+        self.components.get_mut(dense_idx)
     }
 
     #[inline]
@@ -111,20 +135,20 @@ impl<T> SparseSet<T> {
             return (None, None);
         }
 
-        let index_1 = self.sparse.get(entity_1 as usize).and_then(|x| *x);
-        let index_2 = self.sparse.get(entity_2 as usize).and_then(|x| *x);
+        let idx_1 = self.dense_idx(entity_1);
+        let idx_2 = self.dense_idx(entity_2);
 
-        match (index_1, index_2) {
+        match (idx_1, idx_2) {
             (None, None) => (None, None),
-            (Some(index), None) => (self.components.get_mut(index), None),
-            (None, Some(index)) => (None, self.components.get_mut(index)),
-            (Some(index_1), Some(index_2)) => {
-                if index_1 < index_2 {
-                    let (left, right) = self.components.split_at_mut(index_2);
-                    (Some(&mut left[index_1]), Some(&mut right[0]))
+            (Some(idx), None) => (self.components.get_mut(idx), None),
+            (None, Some(idx)) => (None, self.components.get_mut(idx)),
+            (Some(idx_1), Some(idx_2)) => {
+                if idx_1 < idx_2 {
+                    let (left, right) = self.components.split_at_mut(idx_2);
+                    (Some(&mut left[idx_1]), Some(&mut right[0]))
                 } else {
-                    let (left, right) = self.components.split_at_mut(index_1);
-                    (Some(&mut right[0]), Some(&mut left[index_2]))
+                    let (left, right) = self.components.split_at_mut(idx_1);
+                    (Some(&mut right[0]), Some(&mut left[idx_2]))
                 }
             }
         }
@@ -132,21 +156,21 @@ impl<T> SparseSet<T> {
 
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (entities::Entity, &T)> {
-        self.entities.iter().cloned().zip(self.components.iter())
+        self.entities.iter().copied().zip(self.components.iter())
     }
 
     #[inline]
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (entities::Entity, &mut T)> {
-        self.entities.iter().cloned().zip(self.components.iter_mut())
+        self.entities.iter().copied().zip(self.components.iter_mut())
     }
 
     #[inline]
-    pub fn get_ents(&self) -> Vec<entities::Entity> {
-        self.entities.clone()
+    pub fn get_ents(&self) -> &[entities::Entity] {
+        &self.entities
     }
 
     #[inline]
-    pub fn get_ref(&self) -> &Vec<T> {
+    pub fn get_comps(&self) -> &[T] {
         &self.components
     }
 }
