@@ -1,10 +1,9 @@
 [package]
-name = "lithium-engine"
-version = "0.0.1"
+name = "editor"
+version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 macroquad = "0.4"
-serde_yaml = "*"
 serde = { version = "1.0", features = ["derive"] }
-bincode = "2"
+lithium-engine = { path = "../lithium-engine" }

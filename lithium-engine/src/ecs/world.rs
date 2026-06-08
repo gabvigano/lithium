@@ -1,11 +1,10 @@
 use crate::{
     core::error,
     ecs::{components, storage},
-    prelude::SparseSet,
 };
 
 pub struct World<const N: usize> {
-    pub(crate) engine: EngineComponents,
+    pub engine: EngineComponents, // todo: set back to pub(crate) when a better way to keep track of world changes is implemented
     user: UserComponents<N>,
 }
 
@@ -49,6 +48,7 @@ impl<const N: usize> World<N> {
     }
 }
 
+#[derive(Debug, Clone)] // todo: maybe derive for World and UserComponents too?
 pub struct EngineComponents {
     pub transform: storage::SparseSet<components::Transform>,
     pub rotation_matrix: storage::SparseSet<components::RotationMatrix>,
@@ -92,7 +92,7 @@ impl<const N: usize> UserComponents<N> {
     }
 
     #[inline]
-    pub fn get<T: components::UserComponent>(&self, item: usize) -> Result<&SparseSet<T>, error::ComponentError> {
+    pub fn get<T: components::UserComponent>(&self, item: usize) -> Result<&storage::SparseSet<T>, error::ComponentError> {
         let item = self
             .items
             .get(item)
@@ -100,15 +100,12 @@ impl<const N: usize> UserComponents<N> {
             .ok_or(error::ComponentError::ComponentOutOfRange(item))?;
         let any_ref = item.as_any();
         any_ref
-            .downcast_ref::<SparseSet<T>>()
+            .downcast_ref::<storage::SparseSet<T>>()
             .ok_or(error::ComponentError::MismatchingComponent())
     }
 
     #[inline]
-    pub fn get_mut<T: components::UserComponent>(
-        &mut self,
-        item: usize,
-    ) -> Result<&mut SparseSet<T>, error::ComponentError> {
+    pub fn get_mut<T: components::UserComponent>(&mut self, item: usize) -> Result<&mut storage::SparseSet<T>, error::ComponentError> {
         let item = self
             .items
             .get_mut(item)
@@ -116,7 +113,7 @@ impl<const N: usize> UserComponents<N> {
             .ok_or(error::ComponentError::ComponentOutOfRange(item))?;
         let any_ref = item.as_any_mut();
         any_ref
-            .downcast_mut::<SparseSet<T>>()
+            .downcast_mut::<storage::SparseSet<T>>()
             .ok_or(error::ComponentError::MismatchingComponent())
     }
 }

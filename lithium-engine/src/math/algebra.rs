@@ -1,5 +1,7 @@
-use serde::Deserialize;
 use std::fmt;
+
+use bincode::{Decode, Encode};
+use serde::Deserialize;
 
 pub const EPS: f32 = 1e-6;
 pub const EPS_SQR: f32 = EPS * EPS;
@@ -11,7 +13,7 @@ pub fn pow2(x: f32) -> f32 {
     x * x
 }
 
-#[derive(Copy, Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode, Deserialize)]
 pub struct Vec2 {
     pub x: f32,
     pub y: f32,
@@ -205,11 +207,6 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn vec_dist(self, point: Self) -> Self {
-        Self::new(point.x - self.x, point.y - self.y)
-    }
-
-    #[inline]
     pub fn dist(self, point: Self) -> f32 {
         self.square_dist(point).sqrt()
     }
@@ -249,7 +246,7 @@ impl fmt::Display for Vec2 {
 /// so some operations (like mat2x3 * mat2x3) that would not even be possible
 /// are done by hardcoding that third row
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub struct Mat2x3 {
     pub x: (f32, f32),
     pub y: (f32, f32),
@@ -269,10 +266,7 @@ impl Mat2x3 {
         Self::new(
             (cos, sin),
             (-sin, cos),
-            (
-                (1.0 - cos) * pivot.x + sin * pivot.y,
-                (1.0 - cos) * pivot.y - sin * pivot.x,
-            ),
+            ((1.0 - cos) * pivot.x + sin * pivot.y, (1.0 - cos) * pivot.y - sin * pivot.x),
         )
     }
 
@@ -375,13 +369,13 @@ impl fmt::Display for Mat2x3 {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Axis {
     X,
     Y,
 }
 
-#[derive(Copy, Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 pub struct Radians(pub f32);
 
 impl Radians {

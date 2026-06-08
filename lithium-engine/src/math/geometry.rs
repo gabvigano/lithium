@@ -3,10 +3,12 @@ use crate::{
     math::{self, Vec2},
 };
 
-use serde::Deserialize;
 use std::fmt;
 
-#[derive(Clone, Debug)]
+use bincode::{Decode, Encode};
+use serde::Deserialize;
+
+#[derive(Debug, Clone)]
 pub struct HitBox {
     pub(crate) min_x: f32,
     pub(crate) min_y: f32,
@@ -110,12 +112,7 @@ impl HitBox {
 
     #[inline]
     pub fn add_pos(self, pos: math::Vec2) -> Self {
-        Self::new(
-            self.min_x + pos.x,
-            self.min_y + pos.y,
-            self.max_x + pos.x,
-            self.max_y + pos.y,
-        )
+        Self::new(self.min_x + pos.x, self.min_y + pos.y, self.max_x + pos.x, self.max_y + pos.y)
     }
 
     #[inline]
@@ -156,13 +153,8 @@ pub trait ApplyTransformationVertsStep {
     type Output;
     fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output;
     fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output;
-    fn apply_mat2x3_then_vec2_step(
-        &self,
-        vec_1: math::Vec2,
-        vec_2: math::Vec2,
-        mat_1: &math::Mat2x3,
-        mat_2: &math::Mat2x3,
-    ) -> Self::Output;
+    fn apply_mat2x3_then_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3)
+    -> Self::Output;
 }
 
 pub trait ApplyTransformationShape {
@@ -180,7 +172,7 @@ pub trait ToHitBox {
     fn to_hitbox(&self) -> HitBox;
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum SweptShape {
     Unchanged(Shape),
     Changed(Polygon),
@@ -202,7 +194,7 @@ impl SweptShape {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub enum Shape {
     Segment(Segment),
     Triangle(Triangle),
@@ -311,7 +303,7 @@ impl fmt::Display for Shape {
 }
 
 /// notice that a and b are local positions, you may need to manually integrate them with a position
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub struct Segment {
     pub(crate) a: math::Vec2,
     pub(crate) b: math::Vec2,
@@ -448,12 +440,7 @@ impl ApplyTransformationVertsStep for Segment {
 
     #[inline]
     fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
-        [
-            self.a.add(vec_1),
-            self.b.add(vec_1),
-            self.a.add(vec_2),
-            self.b.add(vec_2),
-        ]
+        [self.a.add(vec_1), self.b.add(vec_1), self.a.add(vec_2), self.b.add(vec_2)]
     }
 
     #[inline]
@@ -524,118 +511,8 @@ impl fmt::Display for Segment {
     }
 }
 
-// #[derive(Clone, Debug)]
-// pub struct SegmentCache {
-//     pub a: math::Vec2,
-//     pub b: math::Vec2,
-//     pub delta_x: f32,
-//     pub delta_y: f32,
-//     pub m: Option<f32>,
-//     pub q: Option<f32>,
-//     pub c: f32,
-//     pub pow_sum: f32,
-// }
-
-// impl SegmentCache {
-//     #[inline]
-//     pub fn new(a: math::Vec2, b: math::Vec2) -> Self {
-//         let delta_x = b.x - a.x;
-//         let delta_y = b.y - a.y;
-
-//         let (m, q) = if delta_x.abs() <= math::EPS {
-//             (None, None)
-//         } else {
-//             let m = delta_y / delta_x;
-//             (Some(m), Some(a.y - m * a.x))
-//         };
-
-//         Self {
-//             a: a,
-//             b: b,
-//             delta_x: delta_x,
-//             delta_y: delta_y,
-//             m: m,
-//             q: q,
-//             c: (b.x * a.y - b.y * a.x),
-//             pow_sum: (pow2(delta_x) + pow2(delta_y)),
-//         }
-//     }
-
-//     #[inline]
-//     pub fn from(segment: Segment) -> Self {
-//         Self::new(segment.a, segment.b)
-//     }
-
-//     #[inline]
-//     pub fn eval_x(&self, x: f32) -> Option<f32> {
-//         if x < self.a.x.min(self.b.x) - math::EPS || x > self.a.x.max(self.b.x) + math::EPS {
-//             // out of range
-//             return None;
-//         };
-
-//         match (self.m, self.q) {
-//             (Some(m), Some(q)) => Some(x.mul_add(m, q)),
-//             _ => None,
-//         }
-//     }
-
-//     #[inline]
-//     pub fn eval_y(&self, y: f32) -> Option<f32> {
-//         if y < self.a.y.min(self.b.y) - math::EPS || y > self.a.y.max(self.b.y) + math::EPS {
-//             // out of range
-//             return None;
-//         };
-
-//         match (self.m, self.q) {
-//             (Some(m), Some(q)) if m.abs() > math::EPS => Some((y - q) / m),
-//             _ => None,
-//         }
-//     }
-
-//     #[inline]
-//     pub fn point_square_dist(&self, point: math::Vec2) -> f32 {
-//         // vector from A to the point
-//         let ap = math::Vec2::new(point.x - self.a.x, point.y - self.a.y);
-
-//         // squared length of the segment
-//         if self.pow_sum <= math::math::EPS_SQR {
-//             // segment is a single point at A
-//             return ap.square_len();
-//         }
-
-//         // projection factor of AP onto AB, normalized by |AB|^2
-//         let t = ap.dot(math::Vec2::new(self.delta_x, self.delta_y)) / self.pow_sum;
-
-//         if t < 0.0 {
-//             // projection is before A → closest point is A
-//             ap.square_len()
-//         } else if t > 1.0 {
-//             // projection is past B → closest point is B
-//             math::Vec2::new(point.x - self.b.x, point.y - self.b.y).square_len()
-//         } else {
-//             // projection falls on the segment → use perpendicular distance
-//             pow2(self.delta_y * point.x - self.delta_x * point.y + self.c) / self.pow_sum
-//         }
-//     }
-
-//     #[inline]
-//     pub fn rect_square_dist(&self, pos: math::Vec2, rect: Rect) -> (f32, f32, f32, f32) {
-//         let tl = self.point_square_dist(pos);
-//         let tr = self.point_square_dist(math::Vec2::new(pos.x + rect.width, pos.y));
-//         let bl = self.point_square_dist(math::Vec2::new(pos.x, pos.y + rect.height));
-//         let br = self.point_square_dist(math::Vec2::new(pos.x + rect.width, pos.y + rect.height));
-
-//         (tl, tr, bl, br)
-//     }
-
-//     #[inline]
-//     pub fn circle_square_dist(&self, pos: math::Vec2, circle: Circle) -> f32 {
-//         self.point_square_dist(math::Vec2::new(pos.x + circle.radius, pos.y + circle.radius))
-//     }
-// }
-
 /// notice that a, b and c are local positions, you may need to manually integrate them with a position
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub struct Triangle {
     pub(crate) a: math::Vec2,
     pub(crate) b: math::Vec2,
@@ -720,11 +597,7 @@ impl ApplyTransformationVerts for Triangle {
 
     #[inline]
     fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output {
-        [
-            mat.pre_mul_vec2(self.a),
-            mat.pre_mul_vec2(self.b),
-            mat.pre_mul_vec2(self.c),
-        ]
+        [mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c)]
     }
 
     #[inline]
@@ -802,20 +675,12 @@ impl ApplyTransformationShape for Triangle {
     where
         Self: Sized,
     {
-        Self::new(
-            mat.pre_mul_vec2(self.a),
-            mat.pre_mul_vec2(self.b),
-            mat.pre_mul_vec2(self.c),
-        )
+        Self::new(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c))
     }
 
     #[inline]
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
-        Self::new_unchecked(
-            mat.pre_mul_vec2(self.a),
-            mat.pre_mul_vec2(self.b),
-            mat.pre_mul_vec2(self.c),
-        )
+        Self::new_unchecked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c))
     }
 }
 
@@ -832,7 +697,7 @@ impl fmt::Display for Triangle {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub struct Rect {
     pub(crate) width: f32,
     pub(crate) height: f32,
@@ -896,7 +761,7 @@ impl fmt::Display for Rect {
 }
 
 /// notice that a, b, c and d are local positions, you may need to manually integrate them with a position
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub struct Quad {
     pub(crate) a: math::Vec2,
     pub(crate) b: math::Vec2,
@@ -1128,7 +993,7 @@ impl fmt::Display for Quad {
 
 /// polygons must be convex, vertices must be stored counterclockwise, and there must be no collinear edges
 /// notice that vertices are local positions, you may need to manually integrate them with a position
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub struct Polygon {
     pub(crate) verts: Vec<math::Vec2>,
 }
@@ -1343,7 +1208,7 @@ impl fmt::Display for Polygon {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
 pub struct Circle {
     pub(crate) radius: f32,
 }
@@ -1391,34 +1256,3 @@ impl fmt::Display for Circle {
         write!(f, "circle ({:.4})", self.radius)
     }
 }
-
-// #[derive(Copy, Clone, Deserialize, Debug)]
-// pub struct Line {
-//     pub m: f32,
-//     pub q: f32,
-// }
-
-// impl Line {
-//     #[inline]
-//     pub fn new(m: f32, q: f32) -> Self {
-//         Self { m, q }
-//     }
-
-//     #[inline]
-//     pub fn from(segment: Segment) -> Self {
-//         let delta_x = segment.b.x - segment.a.x;
-//         let delta_y = segment.b.y - segment.a.y;
-
-//         let (m, q) = if delta_x.abs() <= math::EPS {
-//             (None, None)
-//         } else {
-//             let m = delta_y / delta_x;
-//             (Some(m), Some(segment.a.y - m * segment.a.x))
-//         };
-
-//         Self {
-//             m: m.expect("m is None"),
-//             q: q.expect("q is None"),
-//         }
-//     }
-// }

@@ -9,6 +9,7 @@ use std::any::Any;
 /// - components[dense] stores the component value
 /// - entities[dense] stores the entity that owns components[dense]
 /// - sparse[entity] stores Some(dense) if that entity has a component, otherwise None
+#[derive(Debug, Clone)]
 pub struct SparseSet<T> {
     components: Vec<T>,
     entities: Vec<entities::Entity>,
@@ -77,9 +78,7 @@ impl<T> SparseSet<T> {
 
     #[inline]
     pub fn update(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
-        let dense_idx = self
-            .dense_idx(entity)
-            .ok_or(error::ComponentError::ComponentNotFound(entity))?;
+        let dense_idx = self.dense_idx(entity).ok_or(error::ComponentError::ComponentNotFound(entity))?;
 
         self.components[dense_idx] = component;
         Ok(())
@@ -126,11 +125,7 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn get2_mut(
-        &mut self,
-        entity_1: entities::Entity,
-        entity_2: entities::Entity,
-    ) -> (Option<&mut T>, Option<&mut T>) {
+    pub fn get2_mut(&mut self, entity_1: entities::Entity, entity_2: entities::Entity) -> (Option<&mut T>, Option<&mut T>) {
         if entity_1 == entity_2 {
             return (None, None);
         }

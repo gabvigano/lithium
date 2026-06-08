@@ -21,8 +21,18 @@ impl Camera {
     }
 
     #[inline]
+    pub fn pos_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.pos
+    }
+
+    #[inline]
     pub fn rel_pos(&self) -> math::Vec2 {
         self.rel_pos
+    }
+
+    #[inline]
+    pub fn rel_pos_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.rel_pos
     }
 
     #[inline]

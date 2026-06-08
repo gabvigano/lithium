@@ -1,0 +1,32 @@
+- entity: 0
+  kind: transform
+  data: { pos: { x: 100.0, y: -100.0 } }
+
+- entity: 0
+  kind: rotation_matrix
+  data: { rot_degrees: 45.0, pivot: { x: 0.0, y: 0.0 } }
+
+- entity: 0
+  kind: translation
+  data: { lin_vel: { x: 0.0, y: 0.0 }, force: { x: 0.0, y: 0.0 }, mass: 0.5 }
+
+- entity: 0
+  kind: rotation
+  data: { ang_vel: 0.0, torque: 0.0, inertia: 170.313 }
+
+- entity: 0
+  kind: surface
+  data: { elast: 0.5, static_friction: 0.2, kinetic_friction: 0.15 }
+
+- entity: 0
+  kind: body
+  data:
+    shape: !Quad
+      a: { x: 0.0, y: 0.0 }
+      b: { x: 0.0, y: 100.0 }
+      c: { x: 100.0, y: 100.0 }
+      d: { x: 100.0, y: 0.0 }
+
+- entity: 0
+  kind: material
+  data: { color: { r: 255, g: 0, b: 0, a: 255 }, layer: 1, show: true }

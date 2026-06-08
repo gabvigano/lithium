@@ -1,8 +1,8 @@
 use lithium_engine::prelude;
 
-use macroquad::prelude as mq_prelude;
-
 use std::fmt::Write;
+
+use macroquad::prelude as mq_prelude;
 
 const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
 
@@ -155,8 +155,7 @@ async fn main() {
             prelude::reset_force(&mut world, GRAVITY);
 
             // handle user inputs
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::W) && world.engine().translation.get(player).unwrap().rest()
-            {
+            if mq_prelude::is_key_down(mq_prelude::KeyCode::W) && world.engine().translation.get(player).unwrap().rest() {
                 prelude::apply_axis_lin_vel(&mut world, player, -12.0, Some(-12.0), prelude::Axis::Y).unwrap();
                 // prelude::apply_axis_force(&mut world, player, -5.0, None, prelude::Axis::Y);
             }

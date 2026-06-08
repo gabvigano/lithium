@@ -1,7 +1,9 @@
-use serde::Deserialize;
 use std::fmt;
 
-#[derive(Copy, Clone, Deserialize, Debug)]
+use bincode::{Decode, Encode};
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode, Deserialize)]
 pub struct Color {
     pub r: u8,
     pub g: u8,

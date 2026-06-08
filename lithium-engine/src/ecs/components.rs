@@ -3,8 +3,10 @@ use crate::{
     math::{self, Centroid},
 };
 
-use serde::Deserialize;
 use std::{any::Any, fmt};
+
+use bincode::{Decode, Encode};
+use serde::Deserialize;
 
 pub const IDENTITY_ROTATION_MATRIX: RotationMatrix = RotationMatrix::identity();
 
@@ -18,7 +20,7 @@ pub struct TransformSpec {
     pub pos: math::Vec2,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Transform {
     pub(crate) pos: math::Vec2,
 }
@@ -68,7 +70,7 @@ impl RotationMatrixSpec {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct RotationMatrix {
     pub(crate) rot_mat: math::Mat2x3,
 }
@@ -101,12 +103,12 @@ impl RotationMatrix {
     }
 
     #[inline]
-    pub fn get_rot_mat(&self) -> &math::Mat2x3 {
+    pub fn rot_mat(&self) -> &math::Mat2x3 {
         &self.rot_mat
     }
 
     #[inline]
-    pub fn get_rot_mat_mut(&mut self) -> &mut math::Mat2x3 {
+    pub fn rot_mat_mut(&mut self) -> &mut math::Mat2x3 {
         &mut self.rot_mat
     }
 
@@ -159,7 +161,7 @@ pub struct TranslationSpec {
     pub mass: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Translation {
     pub(crate) lin_vel: math::Vec2,
     pub(crate) force: math::Vec2,
@@ -256,7 +258,7 @@ pub struct RotationSpec {
     pub inertia: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Rotation {
     pub(crate) ang_vel: f32,
     pub(crate) torque: f32,
@@ -341,7 +343,7 @@ pub struct SurfaceSpec {
     pub kinetic_friction: f32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Surface {
     pub(crate) elast: f32,
     pub(crate) static_friction: f32,
@@ -410,7 +412,7 @@ pub struct BodySpec {
     pub shape: math::Shape,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Body {
     pub(crate) shape: math::Shape,
     pub(crate) centroid: math::Vec2,
@@ -459,7 +461,7 @@ pub struct MaterialSpec {
     pub show: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Material {
     pub(crate) color: math::Color,
     pub(crate) layer: usize,
@@ -505,11 +507,7 @@ impl Material {
 
 impl fmt::Display for Material {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "material (color: {}, layer: {}, show: {})",
-            self.color, self.layer, self.show
-        )
+        write!(f, "material (color: {}, layer: {}, show: {})", self.color, self.layer, self.show)
     }
 }
 

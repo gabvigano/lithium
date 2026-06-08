@@ -39,11 +39,7 @@ fn check_sat(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape)
                     }
                 }
                 math::Shape::Triangle(triangle) => {
-                    let triangle_sides = [
-                        triangle.b.sub(triangle.a),
-                        triangle.c.sub(triangle.b),
-                        triangle.a.sub(triangle.c),
-                    ];
+                    let triangle_sides = [triangle.b.sub(triangle.a), triangle.c.sub(triangle.b), triangle.a.sub(triangle.c)];
                     for triangle_side in triangle_sides {
                         if triangle_side.square_mag() > EPS_SQR {
                             sides.push(triangle_side);
@@ -51,12 +47,7 @@ fn check_sat(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape)
                     }
                 }
                 math::Shape::Quad(quad) => {
-                    let quad_sides = [
-                        quad.b.sub(quad.a),
-                        quad.c.sub(quad.b),
-                        quad.d.sub(quad.c),
-                        quad.a.sub(quad.d),
-                    ];
+                    let quad_sides = [quad.b.sub(quad.a), quad.c.sub(quad.b), quad.d.sub(quad.c), quad.a.sub(quad.d)];
                     for quad_side in quad_sides {
                         if quad_side.square_mag() > EPS_SQR {
                             sides.push(quad_side);
@@ -100,8 +91,7 @@ fn check_sat(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape)
                     (a_proj.min(b_proj).min(c_proj), a_proj.max(b_proj).max(c_proj))
                 }
                 math::Shape::Quad(quad) => {
-                    let (a_proj, b_proj, c_proj, d_proj) =
-                        (quad.a.dot(axis), quad.b.dot(axis), quad.c.dot(axis), quad.d.dot(axis));
+                    let (a_proj, b_proj, c_proj, d_proj) = (quad.a.dot(axis), quad.b.dot(axis), quad.c.dot(axis), quad.d.dot(axis));
 
                     (
                         a_proj.min(b_proj).min(c_proj).min(d_proj),
@@ -165,26 +155,12 @@ fn check_sat(swept_shape_1: &math::SweptShape, swept_shape_2: &math::SweptShape)
     let mut min_overlap = f32::INFINITY;
     let mut normal = math::Vec2::new(0.0, 0.0); // minimum translation vector axis, the axis of the smallest vector to push one shape out of the other
 
-    check_axes(
-        &sides,
-        swept_shape_1,
-        swept_shape_2,
-        delta,
-        &mut min_overlap,
-        &mut normal,
-    )?;
+    check_axes(&sides, swept_shape_1, swept_shape_2, delta, &mut min_overlap, &mut normal)?;
 
     sides.clear();
     add_sides(swept_shape_2, &mut sides);
 
-    check_axes(
-        &sides,
-        swept_shape_1,
-        swept_shape_2,
-        delta,
-        &mut min_overlap,
-        &mut normal,
-    )?;
+    check_axes(&sides, swept_shape_1, swept_shape_2, delta, &mut min_overlap, &mut normal)?;
 
     Some(normal)
 }
@@ -224,13 +200,10 @@ fn compute_hitbox(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => &segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        &segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        &segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => &segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => &segment.apply_vec2_step(pos, pos_2),
                 };
@@ -248,13 +221,10 @@ fn compute_hitbox(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => &triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        &triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        &triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => &triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => &triangle.apply_vec2_step(pos, pos_2),
                 };
@@ -272,13 +242,10 @@ fn compute_hitbox(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => &quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        &quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        &quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => &quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => &quad.apply_vec2_step(pos, pos_2),
                 };
@@ -296,13 +263,10 @@ fn compute_hitbox(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => &polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        &polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        &polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => &polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => &polygon.apply_vec2_step(pos, pos_2),
                 };
@@ -424,13 +388,10 @@ fn compute_swept_shape(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let mut verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => segment.apply_vec2_step(pos, pos_2),
                 };
@@ -448,13 +409,10 @@ fn compute_swept_shape(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let mut verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => triangle.apply_vec2_step(pos, pos_2),
                 };
@@ -472,13 +430,10 @@ fn compute_swept_shape(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let mut verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => quad.apply_vec2_step(pos, pos_2),
                 };
@@ -496,13 +451,10 @@ fn compute_swept_shape(
             } else {
                 // if it is far or active use the step variant, which takes into account the movement between one frame and the next
                 let mut verts = match (rot_mat, rot_mat_2) {
-                    (
-                        Some(components::RotationMatrix { rot_mat: rm }),
-                        Some(components::RotationMatrix { rot_mat: rm_2 }),
-                    ) => polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2),
-                    (Some(components::RotationMatrix { rot_mat: rm }), None) => {
-                        polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm)
+                    (Some(components::RotationMatrix { rot_mat: rm }), Some(components::RotationMatrix { rot_mat: rm_2 })) => {
+                        polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
                     }
+                    (Some(components::RotationMatrix { rot_mat: rm }), None) => polygon.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
                     (None, Some(_)) => panic!("rot_mat_2 exists but there is not rot_mat"),
                     (None, None) => polygon.apply_vec2_step(pos, pos_2),
                 };
@@ -560,11 +512,7 @@ fn compute_contact_point(
     const FEATURE_MARGIN: f32 = 0.05;
     const PARALLEL_EPS: f32 = 0.02;
 
-    fn find_support_feature(
-        normal: math::Vec2,
-        rot_mat: Option<&components::RotationMatrix>,
-        shape: &math::Shape,
-    ) -> Feature {
+    fn find_support_feature(normal: math::Vec2, rot_mat: Option<&components::RotationMatrix>, shape: &math::Shape) -> Feature {
         fn find_support_feature_from_pairs(pairs: &[(math::Vec2, f32)]) -> Feature {
             let n_sides = pairs.len();
 
@@ -624,12 +572,7 @@ fn compute_contact_point(
                     None => [quad.a, quad.b, quad.c, quad.d],
                 };
 
-                let pairs = [
-                    (a, a.dot(normal)),
-                    (b, b.dot(normal)),
-                    (c, c.dot(normal)),
-                    (d, d.dot(normal)),
-                ];
+                let pairs = [(a, a.dot(normal)), (b, b.dot(normal)), (c, c.dot(normal)), (d, d.dot(normal))];
 
                 find_support_feature_from_pairs(&pairs)
             }
@@ -725,10 +668,7 @@ fn compute_contact_point(
         best_on_1.midpoint(best_on_2)
     }
 
-    fn midpoint_of_min_dist_between_parallel_non_overlapping_segments(
-        segment_1: &math::Segment,
-        segment_2: &math::Segment,
-    ) -> math::Vec2 {
+    fn midpoint_of_min_dist_between_parallel_non_overlapping_segments(segment_1: &math::Segment, segment_2: &math::Segment) -> math::Vec2 {
         let square_dist_a_a = segment_1.a.square_dist(segment_2.a);
         let square_dist_a_b = segment_1.a.square_dist(segment_2.b);
         let square_dist_b_a = segment_1.b.square_dist(segment_2.a);
@@ -977,10 +917,8 @@ fn compute_reaction(
         let vel_1 = lin_vel_1.add(arm_1.cross_scalar(ang_vel_1));
         let vel_2 = lin_vel_2.add(arm_2.cross_scalar(ang_vel_2));
 
-        let normal_inv_mass_inertia = inv_mass_1
-            + inv_mass_2
-            + inv_inertia_1 * math::pow2(arm_1.cross(normal))
-            + inv_inertia_2 * math::pow2(arm_2.cross(normal));
+        let normal_inv_mass_inertia =
+            inv_mass_1 + inv_mass_2 + inv_inertia_1 * math::pow2(arm_1.cross(normal)) + inv_inertia_2 * math::pow2(arm_2.cross(normal));
 
         // relative velocity from shape_1 to shape_2, vector from vel_1 to vel_2
         let rel_vel = vel_2.sub(vel_1);
@@ -1051,9 +989,14 @@ fn compute_reaction(
         let lin_vel_1 = if let Some(translation_1) = translation_1.as_deref_mut() {
             translation_1.lin_vel.sub_mut(impulse_vector.scale(inv_mass_1)); // here we subtract the delta_lin_vel (see above why)
 
-            // round y linear velocity to 0 for object 1
-            if translation_1.rest && translation_1.lin_vel.y.abs() <= 0.6 {
-                translation_1.lin_vel.y = 0.0;
+            // round linear velocity to 0 for object 1
+            if translation_1.rest {
+                if translation_1.lin_vel.x.abs() <= 0.1 {
+                    translation_1.lin_vel.x = 0.0;
+                }
+                if translation_1.lin_vel.y.abs() <= 0.6 {
+                    translation_1.lin_vel.y = 0.0;
+                }
             }
 
             // recompute lin_vel_1
@@ -1065,9 +1008,14 @@ fn compute_reaction(
         let lin_vel_2 = if let Some(translation_2) = translation_2.as_deref_mut() {
             translation_2.lin_vel.add_mut(impulse_vector.scale(inv_mass_2)); // here we add the delta_lin_vel (see above why)
 
-            // round y linear velocity to 0 for object 2
-            if translation_2.rest && translation_2.lin_vel.y.abs() <= 0.6 {
-                translation_2.lin_vel.y = 0.0;
+            // round linear velocity to 0 for object 2
+            if translation_2.rest {
+                if translation_2.lin_vel.x.abs() <= 0.1 {
+                    translation_2.lin_vel.x = 0.0;
+                }
+                if translation_2.rest && translation_2.lin_vel.y.abs() <= 0.6 {
+                    translation_2.lin_vel.y = 0.0;
+                }
             }
 
             // recompute lin_vel_2
@@ -1118,10 +1066,8 @@ fn compute_reaction(
         // tangent_unit is tangent_rel_lin_vel normalized
         let tangent = tangent_rel_vel.scale(1.0 / tangent_rel_vel_mag); // I am not using .norm() because I've already computed the magnitude
 
-        let tangent_inv_mass_inertia = inv_mass_1
-            + inv_mass_2
-            + inv_inertia_1 * math::pow2(arm_1.cross(tangent))
-            + inv_inertia_2 * math::pow2(arm_2.cross(tangent));
+        let tangent_inv_mass_inertia =
+            inv_mass_1 + inv_mass_2 + inv_inertia_1 * math::pow2(arm_1.cross(tangent)) + inv_inertia_2 * math::pow2(arm_2.cross(tangent));
 
         let friction_impulse = -tangent_rel_vel_mag / (tangent_inv_mass_inertia); // impulse that would completely stop the objects
         let max_static = static_friction * impulse.abs(); // maximum impulse of static friction
@@ -1156,7 +1102,7 @@ fn compute_reaction(
 }
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug, Clone, Copy)]
 enum State {
     Active,
     Far,
@@ -1348,9 +1294,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut World<N>, iters: usize) {
                 // hitboxes are colliding, compute swept shapes
                 if swept_shape_1.is_none() {
                     // println!("recomputing swept_shape_1 cache");
-                    swept_shape_1 = Some(compute_swept_shape(
-                        state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1,
-                    ));
+                    swept_shape_1 = Some(compute_swept_shape(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1));
                 }
 
                 let swept_shape_2 = compute_swept_shape(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2);
@@ -1365,8 +1309,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut World<N>, iters: usize) {
 
                 // compute contact point and centers of mass
                 let contact_point = compute_contact_point(
-                    normal, pos_1, pos_2, rot_mat_1, rot_mat_2, lin_vel_1, lin_vel_2, ang_vel_1, ang_vel_2, body_1,
-                    body_2,
+                    normal, pos_1, pos_2, rot_mat_1, rot_mat_2, lin_vel_1, lin_vel_2, ang_vel_1, ang_vel_2, body_1, body_2,
                 );
 
                 let mass_center_1 = match rot_mat_1 {
@@ -1375,10 +1318,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut World<N>, iters: usize) {
                         .pre_mul_vec2(body_1.centroid())
                         .add(pos_1)
                         .add(lin_vel_1.unwrap_or(math::Vec2::zero())),
-                    None => body_1
-                        .centroid()
-                        .add(pos_1)
-                        .add(lin_vel_1.unwrap_or(math::Vec2::zero())),
+                    None => body_1.centroid().add(pos_1).add(lin_vel_1.unwrap_or(math::Vec2::zero())),
                 };
                 let mass_center_2 = match rot_mat_2 {
                     Some(rot_mat) => rot_mat
@@ -1386,10 +1326,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut World<N>, iters: usize) {
                         .pre_mul_vec2(body_2.centroid())
                         .add(pos_2)
                         .add(lin_vel_2.unwrap_or(math::Vec2::zero())),
-                    None => body_2
-                        .centroid()
-                        .add(pos_2)
-                        .add(lin_vel_2.unwrap_or(math::Vec2::zero())),
+                    None => body_2.centroid().add(pos_2).add(lin_vel_2.unwrap_or(math::Vec2::zero())),
                 };
 
                 // collision detected

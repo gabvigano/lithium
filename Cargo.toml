@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["lithium-engine", "dropline"]
+members = ["lithium-engine", "dropline", "editor"]
 
 [profile.release]
 opt-level = 3

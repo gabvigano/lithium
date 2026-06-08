@@ -67,8 +67,29 @@
 [ ] positional correction
 
 # system update
-[ ] hot reloading for map.yaml
+[x] hot reloading for map.yaml
 [ ] support circles
+
+# network
+[x] implement network support via udp
+[ ] improve serialization
+[ ] improve world changes detection without cloning (struct storing flags representing changes?)
+[ ] search "todo" in entire project
+[ ] solve todos in code (look for "todo" in the entire repo)
+[ ] actually use packets ids
+[ ] support user defined components
+[ ] support hot reloading (it should invalidate all snapshots on the server)
+
+# physics
+[ ] forces applied to a point
+[ ] springs ?
+[ ] solve physical rotation collision bugs
+
+# system update
+[ ] support composite shapes
+[ ] be able to set the center of mass
+[ ] better use of derive for engine's types
+[ ] better apis
 
 # rendering
 [ ] switch to winit + wgpu for graphics

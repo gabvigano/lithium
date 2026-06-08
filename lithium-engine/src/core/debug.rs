@@ -1,4 +1,5 @@
 use crate::{math, renderer::scene};
+
 use macroquad::prelude;
 
 pub fn render_vector(

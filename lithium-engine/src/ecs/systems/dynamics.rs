@@ -36,15 +36,6 @@ pub fn update_pos<const N: usize>(world: &mut World<N>) {
 }
 
 #[inline]
-pub fn update_lin_vel<const N: usize>(world: &mut World<N>) {
-    for (_, translation) in world.engine.translation.iter_mut() {
-        translation
-            .lin_vel
-            .add_mut(translation.force.scale(translation.inv_mass()));
-    }
-}
-
-#[inline]
 pub fn update_rot_mat<const N: usize>(world: &mut World<N>) {
     for (entity, rot_mat) in world.engine.rotation_matrix.iter_mut() {
         if let Some(components::Rotation { ang_vel, .. }) = world.engine.rotation.get(entity)
@@ -55,10 +46,17 @@ pub fn update_rot_mat<const N: usize>(world: &mut World<N>) {
     }
 }
 
+#[inline]
+pub fn update_lin_vel<const N: usize>(world: &mut World<N>) {
+    for (_, translation) in world.engine.translation.iter_mut() {
+        translation.lin_vel.add_mut(translation.force.scale(translation.inv_mass()));
+    }
+}
+
 pub fn apply_axis_lin_vel<const N: usize>(
     world: &mut World<N>,
     entity: entities::Entity,
-    new_lin_vel: f32,
+    lin_vel: f32,
     limit: Option<f32>,
     axis: math::Axis,
 ) -> Option<()> {
@@ -66,26 +64,21 @@ pub fn apply_axis_lin_vel<const N: usize>(
 
     match axis {
         math::Axis::X => {
-            translation.lin_vel.x = clamp_toward_zero(translation.lin_vel.x + new_lin_vel, limit);
+            translation.lin_vel.x = clamp_toward_zero(translation.lin_vel.x + lin_vel, limit);
         }
         math::Axis::Y => {
-            translation.lin_vel.y = clamp_toward_zero(translation.lin_vel.y + new_lin_vel, limit);
+            translation.lin_vel.y = clamp_toward_zero(translation.lin_vel.y + lin_vel, limit);
         }
     }
 
     Some(())
 }
 
-pub fn apply_vel<const N: usize>(
-    world: &mut World<N>,
-    entity: entities::Entity,
-    new_vel: math::Vec2,
-    limit: Option<f32>,
-) -> Option<()> {
+pub fn apply_vel<const N: usize>(world: &mut World<N>, entity: entities::Entity, vel: math::Vec2, limit: Option<f32>) -> Option<()> {
     let translation = world.engine.translation.get_mut(entity)?;
 
-    translation.lin_vel.x = clamp_toward_zero(translation.lin_vel.x + new_vel.x, limit);
-    translation.lin_vel.y = clamp_toward_zero(translation.lin_vel.y + new_vel.y, limit);
+    translation.lin_vel.x = clamp_toward_zero(translation.lin_vel.x + vel.x, limit);
+    translation.lin_vel.y = clamp_toward_zero(translation.lin_vel.y + vel.y, limit);
 
     Some(())
 }
@@ -93,7 +86,7 @@ pub fn apply_vel<const N: usize>(
 pub fn apply_axis_force<const N: usize>(
     world: &mut World<N>,
     entity: entities::Entity,
-    new_force: f32,
+    force: f32,
     limit: Option<f32>,
     axis: math::Axis,
 ) -> Option<()> {
@@ -101,40 +94,31 @@ pub fn apply_axis_force<const N: usize>(
 
     match axis {
         math::Axis::X => {
-            translation.force.x = clamp_toward_zero(translation.force.x + new_force, limit);
+            translation.force.x = clamp_toward_zero(translation.force.x + force, limit);
         }
         math::Axis::Y => {
-            translation.force.y = clamp_toward_zero(translation.force.y + new_force, limit);
+            translation.force.y = clamp_toward_zero(translation.force.y + force, limit);
         }
     }
 
     Some(())
 }
 
-pub fn apply_force<const N: usize>(
-    world: &mut World<N>,
-    entity: entities::Entity,
-    new_force: math::Vec2,
-) -> Option<()> {
+pub fn apply_force<const N: usize>(world: &mut World<N>, entity: entities::Entity, force: math::Vec2) -> Option<()> {
     let translation = world.engine.translation.get_mut(entity)?;
 
-    translation.force.add_mut(new_force);
+    translation.force.add_mut(force);
 
     Some(())
 }
 
 #[inline]
-pub fn apply_rot<const N: usize>(
-    world: &mut World<N>,
-    entity: entities::Entity,
-    delta_rot: math::Radians,
-    pivot: math::Vec2,
-) -> bool {
+pub fn apply_rot<const N: usize>(world: &mut World<N>, entity: entities::Entity, rot: math::Radians, pivot: math::Vec2) -> bool {
     let Some(rot_mat) = world.engine.rotation_matrix.get_mut(entity) else {
         return false;
     };
 
-    if !rot_mat.update_mut(delta_rot, pivot) {
+    if !rot_mat.update_mut(rot, pivot) {
         return false;
     }
 

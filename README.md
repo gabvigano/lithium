@@ -26,7 +26,7 @@ This repository contains:
 ### 📦 Requirements
 
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable recommended)
-- Linux (tested), Windows (tested), macOS (untested but should work)
+- Linux, MacOS, Windows
 
 ---
 

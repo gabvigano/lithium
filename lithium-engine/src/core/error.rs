@@ -1,6 +1,6 @@
 use crate::ecs::entities;
 
-use std::fmt;
+use std::{error, fmt, io};
 
 #[derive(Debug)]
 pub enum EngineError {
@@ -8,17 +8,19 @@ pub enum EngineError {
     ComponentError(ComponentError),
     MathError(MathError),
     GeometryError(GeometryError),
+    NetworkError(NetworkError),
 }
 
-impl std::error::Error for EngineError {}
+impl error::Error for EngineError {}
 
-impl std::fmt::Display for EngineError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for EngineError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::FileError(e) => write!(f, "{e}"),
             Self::ComponentError(e) => write!(f, "{e}"),
             Self::MathError(e) => write!(f, "{e}"),
             Self::GeometryError(e) => write!(f, "{e}"),
+            Self::NetworkError(e) => write!(f, "{e}"),
         }
     }
 }
@@ -47,13 +49,19 @@ impl From<GeometryError> for EngineError {
     }
 }
 
+impl From<NetworkError> for EngineError {
+    fn from(e: NetworkError) -> Self {
+        Self::NetworkError(e)
+    }
+}
+
 #[derive(Debug)]
 pub enum FileError {
-    Load(std::io::Error),
+    Load(io::Error),
     Parse(serde_yaml::Error),
 }
 
-impl std::error::Error for FileError {}
+impl error::Error for FileError {}
 
 impl fmt::Display for FileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -64,8 +72,8 @@ impl fmt::Display for FileError {
     }
 }
 
-impl From<std::io::Error> for FileError {
-    fn from(e: std::io::Error) -> Self {
+impl From<io::Error> for FileError {
+    fn from(e: io::Error) -> Self {
         Self::Load(e)
     }
 }
@@ -84,7 +92,7 @@ pub enum ComponentError {
     DuplicateComponent(entities::Entity),
 }
 
-impl std::error::Error for ComponentError {}
+impl error::Error for ComponentError {}
 
 impl fmt::Display for ComponentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -110,7 +118,7 @@ pub enum MathError {
     NonPositive(&'static str),
 }
 
-impl std::error::Error for MathError {}
+impl error::Error for MathError {}
 
 impl fmt::Display for MathError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -127,7 +135,7 @@ pub enum GeometryError {
     NotConvex,
 }
 
-impl std::error::Error for GeometryError {}
+impl error::Error for GeometryError {}
 
 impl fmt::Display for GeometryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -136,5 +144,48 @@ impl fmt::Display for GeometryError {
             GeometryError::DuplicateVertices => write!(f, "shape has overlapping or duplicate vertices"),
             GeometryError::NotConvex => write!(f, "shape must be convex"),
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum NetworkError {
+    AddrNotAvailable,
+    NetworkUnreachable,
+    PermissionDenied,
+    AddressInUse,
+    SerializationError(bincode::error::EncodeError),
+    Io(io::Error),
+}
+
+impl error::Error for NetworkError {}
+
+impl fmt::Display for NetworkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            NetworkError::AddrNotAvailable => write!(f, "address is not available"),
+            NetworkError::NetworkUnreachable => write!(f, "the network is unreachable"),
+            NetworkError::PermissionDenied => write!(f, "permission denied"),
+            NetworkError::AddressInUse => write!(f, "address is already in use"),
+            NetworkError::SerializationError(e) => write!(f, "serialization error: {e}"),
+            NetworkError::Io(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl From<io::Error> for NetworkError {
+    fn from(e: io::Error) -> Self {
+        match e.kind() {
+            io::ErrorKind::AddrNotAvailable => Self::AddrNotAvailable,
+            io::ErrorKind::NetworkUnreachable | io::ErrorKind::HostUnreachable => Self::NetworkUnreachable,
+            io::ErrorKind::PermissionDenied => Self::PermissionDenied,
+            io::ErrorKind::AddrInUse => Self::AddressInUse,
+            _ => Self::Io(e),
+        }
+    }
+}
+
+impl From<bincode::error::EncodeError> for NetworkError {
+    fn from(e: bincode::error::EncodeError) -> Self {
+        Self::SerializationError(e)
     }
 }

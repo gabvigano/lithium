@@ -4,21 +4,22 @@ use crate::{
     math::geometry::Validate,
 };
 
+use std::{collections::HashMap, fs};
+
 use serde::Deserialize;
 use serde_yaml::Value;
-use std::{collections::HashMap, fs};
 
 pub type FileEntity = u32;
 type ComponentKey = (FileEntity, String);
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct LoadableComponent {
     pub entity: u32,
     pub kind: String,
     pub data: Value,
 }
 
-pub struct MapCache {
+pub struct AssetCache {
     pub path: String,
     pub metadata: std::time::SystemTime,
     pub raw_file: String,
@@ -47,10 +48,8 @@ pub fn load<const N: usize>(
     path: &str,
     world: &mut World<N>,
     entity_manager: &mut entities::EntityManager,
-    match_user_upsert_option: Option<
-        fn(&mut World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>,
-    >,
-) -> Result<MapCache, error::EngineError> {
+    match_user_upsert_option: Option<fn(&mut World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
+) -> Result<AssetCache, error::EngineError> {
     let metadata = read_metadata(path).map_err(error::FileError::from)?;
     let raw_file = read_raw_file(path)?;
     let parsed_file = parse_file(&raw_file)?;
@@ -61,9 +60,7 @@ pub fn load<const N: usize>(
     match match_user_upsert_option {
         Some(match_user_upsert) => {
             for component in parsed_file {
-                let entity = *entity_map
-                    .entry(component.entity)
-                    .or_insert_with(|| entity_manager.create());
+                let entity = *entity_map.entry(component.entity).or_insert_with(|| entity_manager.create());
 
                 let kind = component.kind.as_str();
 
@@ -74,9 +71,7 @@ pub fn load<const N: usize>(
         }
         None => {
             for component in parsed_file {
-                let entity = *entity_map
-                    .entry(component.entity)
-                    .or_insert_with(|| entity_manager.create());
+                let entity = *entity_map.entry(component.entity).or_insert_with(|| entity_manager.create());
 
                 match_engine_upsert(world, entity, component.kind.as_str(), component.data.clone())?;
                 storage.insert((component.entity, component.kind), component.data);
@@ -84,7 +79,7 @@ pub fn load<const N: usize>(
         }
     };
 
-    Ok(MapCache {
+    Ok(AssetCache {
         path: String::from(path),
         metadata: metadata,
         raw_file: raw_file,
@@ -95,12 +90,10 @@ pub fn load<const N: usize>(
 
 #[inline]
 pub fn hot_reload<const N: usize>(
-    cache: &mut MapCache,
+    cache: &mut AssetCache,
     world: &mut World<N>,
     entity_manager: &mut entities::EntityManager,
-    match_user_upsert_option: Option<
-        fn(&mut World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>,
-    >,
+    match_user_upsert_option: Option<fn(&mut World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
     match_user_remove_option: Option<fn(&mut World<N>, entities::Entity, &str)>,
 ) -> Result<(), error::EngineError> {
     let path = cache.path.as_str();
@@ -133,10 +126,7 @@ pub fn hot_reload<const N: usize>(
                 match cache.storage.get_mut(&(*new_entity, new_kind.clone())) {
                     Some(value) if value != new_value => {
                         // value was modified
-                        let entity = *cache
-                            .entity_map
-                            .entry(*new_entity)
-                            .or_insert_with(|| entity_manager.create());
+                        let entity = *cache.entity_map.entry(*new_entity).or_insert_with(|| entity_manager.create());
 
                         let kind = new_kind.as_str();
 
@@ -147,10 +137,7 @@ pub fn hot_reload<const N: usize>(
                     Some(_) => (), // value didn't change
                     None => {
                         // value was created
-                        let entity = *cache
-                            .entity_map
-                            .entry(*new_entity)
-                            .or_insert_with(|| entity_manager.create());
+                        let entity = *cache.entity_map.entry(*new_entity).or_insert_with(|| entity_manager.create());
 
                         let kind = new_kind.as_str();
 
@@ -166,10 +153,7 @@ pub fn hot_reload<const N: usize>(
                 match cache.storage.get_mut(&(*new_entity, new_kind.clone())) {
                     Some(value) if value != new_value => {
                         // value was modified
-                        let entity = *cache
-                            .entity_map
-                            .entry(*new_entity)
-                            .or_insert_with(|| entity_manager.create());
+                        let entity = *cache.entity_map.entry(*new_entity).or_insert_with(|| entity_manager.create());
 
                         let kind = new_kind.as_str();
 
@@ -179,10 +163,7 @@ pub fn hot_reload<const N: usize>(
                     Some(_) => (), // value didn't change
                     None => {
                         // value was created
-                        let entity = *cache
-                            .entity_map
-                            .entry(*new_entity)
-                            .or_insert_with(|| entity_manager.create());
+                        let entity = *cache.entity_map.entry(*new_entity).or_insert_with(|| entity_manager.create());
 
                         let kind = new_kind.as_str();
 
