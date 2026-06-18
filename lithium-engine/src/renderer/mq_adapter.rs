@@ -1,5 +1,5 @@
 use crate::{
-    ecs::{components, world::World},
+    ecs::{components, world},
     math::{self, algebra},
     renderer::scene,
 };
@@ -18,7 +18,7 @@ pub fn color_to_mq(color: math::Color) -> mq_prelude::Color {
     }
 }
 
-pub fn render<const N: usize>(world: &World<N>, camera: &scene::Camera) {
+pub fn render<const N: usize>(world: &world::World<N>, camera: &scene::Camera) {
     // get reference of the material vector
     let mats = world.engine.material.get_comps();
 
@@ -57,10 +57,7 @@ pub fn render<const N: usize>(world: &World<N>, camera: &scene::Camera) {
                     let (a, b) = if rot_mat_is_none {
                         (pos.add(segment.a), pos.add(segment.b))
                     } else {
-                        (
-                            pos.add(rot_mat.pre_mul_vec2(segment.a)),
-                            pos.add(rot_mat.pre_mul_vec2(segment.b)),
-                        )
+                        (pos.add(rot_mat.pre_mul_vec2(segment.a)), pos.add(rot_mat.pre_mul_vec2(segment.b)))
                     };
 
                     mq_prelude::draw_line(a.x - cam_x, a.y - cam_y, b.x - cam_x, b.y - cam_y, 1.0, color);

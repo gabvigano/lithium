@@ -13,6 +13,15 @@ pub fn pow2(x: f32) -> f32 {
     x * x
 }
 
+#[inline]
+pub fn clamp_toward_zero(value: f32, limit: Option<f32>) -> f32 {
+    match limit {
+        Some(limit) if limit > 0.0 => value.min(limit),
+        Some(limit) => value.max(limit),
+        None => value,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Encode, Decode, Deserialize)]
 pub struct Vec2 {
     pub x: f32,

@@ -8,8 +8,6 @@ use std::{any::Any, fmt};
 use bincode::{Decode, Encode};
 use serde::Deserialize;
 
-pub const IDENTITY_ROTATION_MATRIX: RotationMatrix = RotationMatrix::identity();
-
 pub trait UserComponent: Any + 'static {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -37,8 +35,8 @@ impl Transform {
     }
 
     #[inline]
-    pub fn set_pos(&mut self, new_pos: math::Vec2) {
-        self.pos = new_pos
+    pub fn pos_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.pos
     }
 }
 
@@ -110,11 +108,6 @@ impl RotationMatrix {
     #[inline]
     pub fn rot_mat_mut(&mut self) -> &mut math::Mat2x3 {
         &mut self.rot_mat
-    }
-
-    #[inline]
-    pub fn set_rot_mat(&mut self, new_mat: math::Mat2x3) {
-        self.rot_mat = new_mat;
     }
 
     #[inline]
@@ -212,13 +205,13 @@ impl Translation {
     }
 
     #[inline]
-    pub fn set_lin_vel(&mut self, new_lin_vel: math::Vec2) {
-        self.lin_vel = new_lin_vel;
+    pub fn lin_vel_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.lin_vel
     }
 
     #[inline]
-    pub fn set_force(&mut self, new_force: math::Vec2) {
-        self.force = new_force;
+    pub fn force_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.force
     }
 
     #[inline]
@@ -228,8 +221,44 @@ impl Translation {
     }
 
     #[inline]
-    pub fn set_rest(&mut self, new_rest: bool) {
-        self.rest = new_rest;
+    pub fn rest_mut(&mut self) -> &mut bool {
+        &mut self.rest
+    }
+
+    #[inline]
+    pub fn apply_lin_vel_axis(&mut self, lin_vel: f32, axis: math::Axis, limit: Option<f32>) {
+        match axis {
+            math::Axis::X => {
+                self.lin_vel.x = math::clamp_toward_zero(self.lin_vel.x + lin_vel, limit);
+            }
+            math::Axis::Y => {
+                self.lin_vel.y = math::clamp_toward_zero(self.lin_vel.y + lin_vel, limit);
+            }
+        }
+    }
+
+    #[inline]
+    pub fn apply_lin_vel(&mut self, lin_vel: math::Vec2, limit: Option<f32>) {
+        self.lin_vel.y = math::clamp_toward_zero(self.lin_vel.y + lin_vel.y, limit);
+        self.lin_vel.x = math::clamp_toward_zero(self.lin_vel.x + lin_vel.x, limit);
+    }
+
+    #[inline]
+    pub fn apply_force_axis(&mut self, force: f32, axis: math::Axis, limit: Option<f32>) {
+        match axis {
+            math::Axis::X => {
+                self.force.x = math::clamp_toward_zero(self.force.x + force, limit);
+            }
+            math::Axis::Y => {
+                self.force.y = math::clamp_toward_zero(self.force.y + force, limit);
+            }
+        }
+    }
+
+    #[inline]
+    pub fn apply_force(&mut self, force: math::Vec2, limit: Option<f32>) {
+        self.force.y = math::clamp_toward_zero(self.force.y + force.y, limit);
+        self.force.x = math::clamp_toward_zero(self.force.x + force.x, limit);
     }
 }
 
@@ -302,19 +331,29 @@ impl Rotation {
     }
 
     #[inline]
-    pub fn set_ang_vel(&mut self, new_ang_vel: f32) {
-        self.ang_vel = new_ang_vel;
+    pub fn ang_vel_mut(&mut self) -> &mut f32 {
+        &mut self.ang_vel
     }
 
     #[inline]
-    pub fn set_torque(&mut self, new_torque: f32) {
-        self.torque = new_torque;
+    pub fn torque_mut(&mut self) -> &mut f32 {
+        &mut self.torque
     }
 
     #[inline]
     pub fn set_inertia(&mut self, new_inertia: f32) {
         self.inertia = new_inertia;
         self.inv_inertia = 1.0 / new_inertia;
+    }
+
+    #[inline]
+    pub fn apply_ang_vel(&mut self, ang_vel: f32, limit: Option<f32>) {
+        self.ang_vel = math::clamp_toward_zero(self.ang_vel + ang_vel, limit)
+    }
+
+    #[inline]
+    pub fn apply_torque(&mut self, torque: f32, limit: Option<f32>) {
+        self.torque = math::clamp_toward_zero(self.torque + torque, limit)
     }
 }
 
@@ -376,18 +415,18 @@ impl Surface {
     }
 
     #[inline]
-    pub fn set_elast(&mut self, new_elast: f32) {
-        self.elast = new_elast;
+    pub fn elast_mut(&mut self) -> &mut f32 {
+        &mut self.elast
     }
 
     #[inline]
-    pub fn set_static_friction(&mut self, new_static_friction: f32) {
-        self.static_friction = new_static_friction;
+    pub fn static_friction_mut(&mut self) -> &mut f32 {
+        &mut self.static_friction
     }
 
     #[inline]
-    pub fn set_kinetic_friction(&mut self, new_kinetic_friction: f32) {
-        self.kinetic_friction = new_kinetic_friction;
+    pub fn kinetic_friction_mut(&mut self) -> &mut f32 {
+        &mut self.kinetic_friction
     }
 }
 
@@ -490,18 +529,18 @@ impl Material {
     }
 
     #[inline]
-    pub fn set_color(&mut self, new_color: math::Color) {
-        self.color = new_color;
+    pub fn color_mut(&mut self) -> &mut math::Color {
+        &mut self.color
     }
 
     #[inline]
-    pub fn set_layer(&mut self, new_layer: usize) {
-        self.layer = new_layer;
+    pub fn layer_mut(&mut self) -> &mut usize {
+        &mut self.layer
     }
 
     #[inline]
-    pub fn set_show(&mut self, new_show: bool) {
-        self.show = new_show;
+    pub fn show_mut(&mut self) -> &mut bool {
+        &mut self.show
     }
 }
 

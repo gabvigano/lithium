@@ -151,28 +151,21 @@ async fn main() {
         }
 
         if !pause {
-            // reset force
-            prelude::reset_force(&mut world, GRAVITY);
+            // reset linear and angular acceleration
+            prelude::set_all_lin_acc(&mut world, GRAVITY);
+            prelude::set_all_ang_acc(&mut world, 0.0);
 
             // handle user inputs
             if mq_prelude::is_key_down(mq_prelude::KeyCode::W) && world.engine().translation.get(player).unwrap().rest() {
-                prelude::apply_axis_lin_vel(&mut world, player, -12.0, Some(-12.0), prelude::Axis::Y).unwrap();
-                // prelude::apply_axis_force(&mut world, player, -5.0, None, prelude::Axis::Y);
+                prelude::apply_lin_vel_axis(&mut world, player, -12.0, prelude::Axis::Y, Some(-12.0));
             }
-            // let lin_vel_x = world.translation.get(player).expect("missing translation").lin_vel().x;
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::D)
-            /*&& lin_vel_x < 7.0*/
-            {
-                prelude::apply_axis_lin_vel(&mut world, player, 1.0, Some(10.0), prelude::Axis::X).unwrap();
-                // prelude::apply_axis_force(&mut world, player, 2.0, None, prelude::Axis::X);
+            if mq_prelude::is_key_down(mq_prelude::KeyCode::D) {
+                prelude::apply_lin_vel_axis(&mut world, player, 1.0, prelude::Axis::X, Some(12.0)).unwrap();
             }
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::A)
-            /*&& lin_vel_x > -7.0*/
-            {
-                prelude::apply_axis_lin_vel(&mut world, player, -1.0, Some(-10.0), prelude::Axis::X).unwrap();
-                // prelude::apply_axis_force(&mut world, player, -2.0, None, prelude::Axis::X);
+            if mq_prelude::is_key_down(mq_prelude::KeyCode::A) {
+                prelude::apply_lin_vel_axis(&mut world, player, -1.0, prelude::Axis::X, Some(-12.0)).unwrap();
             }
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::R) {
+            if mq_prelude::is_key_pressed(mq_prelude::KeyCode::R) {
                 // reset environment
                 entity_manager.reset();
                 world = init_world();
@@ -181,23 +174,21 @@ async fn main() {
                 map_cache = prelude::load(map_path, &mut world, &mut entity_manager, None).unwrap();
             }
         }
-        if mq_prelude::is_key_down(mq_prelude::KeyCode::P) {
+        if mq_prelude::is_key_pressed(mq_prelude::KeyCode::P) {
+            pause = !pause;
+        }
+        if mq_prelude::is_key_pressed(mq_prelude::KeyCode::Escape) {
             panic!("user panicked")
-        }
-        if mq_prelude::is_key_down(mq_prelude::KeyCode::I) {
-            pause = false;
-        }
-        if mq_prelude::is_key_down(mq_prelude::KeyCode::O) {
-            pause = true;
         }
 
         if !pause {
             // update world and camera
-            prelude::update_lin_vel(&mut world);
-            prelude::reset_rest(&mut world);
+            prelude::integrate_all_lin_vel(&mut world);
+            prelude::integrate_all_ang_vel(&mut world);
+            prelude::reset_all_rest(&mut world);
             prelude::resolve_collisions(&mut world, 10);
-            prelude::update_pos(&mut world);
-            prelude::update_rot_mat(&mut world);
+            prelude::integrate_all_pos(&mut world);
+            prelude::integrate_all_rot_mat(&mut world);
 
             camera.update(world.engine().transform.get(player).expect("missing transform").pos());
         }

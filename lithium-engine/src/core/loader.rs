@@ -1,6 +1,6 @@
 use crate::{
     core::error,
-    ecs::{components, entities, world::World},
+    ecs::{components, entities, world},
     math::geometry::Validate,
 };
 
@@ -46,9 +46,9 @@ pub fn parse_file(file: &str) -> Result<Vec<LoadableComponent>, error::FileError
 #[inline]
 pub fn load<const N: usize>(
     path: &str,
-    world: &mut World<N>,
+    world: &mut world::World<N>,
     entity_manager: &mut entities::EntityManager,
-    match_user_upsert_option: Option<fn(&mut World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
+    match_user_upsert_option: Option<fn(&mut world::World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
 ) -> Result<AssetCache, error::EngineError> {
     let metadata = read_metadata(path).map_err(error::FileError::from)?;
     let raw_file = read_raw_file(path)?;
@@ -91,10 +91,10 @@ pub fn load<const N: usize>(
 #[inline]
 pub fn hot_reload<const N: usize>(
     cache: &mut AssetCache,
-    world: &mut World<N>,
+    world: &mut world::World<N>,
     entity_manager: &mut entities::EntityManager,
-    match_user_upsert_option: Option<fn(&mut World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
-    match_user_remove_option: Option<fn(&mut World<N>, entities::Entity, &str)>,
+    match_user_upsert_option: Option<fn(&mut world::World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
+    match_user_remove_option: Option<fn(&mut world::World<N>, entities::Entity, &str)>,
 ) -> Result<(), error::EngineError> {
     let path = cache.path.as_str();
     let new_metadata = read_metadata(&cache.path).map_err(error::FileError::from)?;
@@ -211,7 +211,7 @@ pub fn hot_reload<const N: usize>(
 }
 
 fn match_engine_upsert<const N: usize>(
-    world: &mut World<N>,
+    world: &mut world::World<N>,
     entity: entities::Entity,
     kind: &str,
     data: Value,
@@ -258,7 +258,7 @@ fn match_engine_upsert<const N: usize>(
     }
 }
 
-fn match_engine_remove<const N: usize>(world: &mut World<N>, entity: entities::Entity, kind: &str) {
+fn match_engine_remove<const N: usize>(world: &mut world::World<N>, entity: entities::Entity, kind: &str) {
     match kind {
         "transform" => {
             world.engine.transform.remove(entity);

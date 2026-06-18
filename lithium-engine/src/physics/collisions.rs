@@ -1,6 +1,6 @@
 use crate::{
     core::error,
-    ecs::{components, entities, world::World},
+    ecs::{components, entities, world},
     math::{self, ApplyTransformationVerts, ApplyTransformationVertsStep, Centroid, EPS, EPS_SQR},
 };
 
@@ -1112,9 +1112,9 @@ enum State {
 }
 
 /// detects collisions and computes reactions for every object
-pub fn resolve_collisions<const N: usize>(world: &mut World<N>, iters: usize) {
+pub fn resolve_collisions<const N: usize>(world: &mut world::World<N>, iters: usize) {
     #[inline]
-    fn get_state<const N: usize>(world: &World<N>, entity: entities::Entity) -> State {
+    fn get_state<const N: usize>(world: &world::World<N>, entity: entities::Entity) -> State {
         let mut translation_is_zero = false; // true -> exists but is 0; false -> does not exist
         let mut rot_mat_is_zero = false;
 

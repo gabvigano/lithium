@@ -15,7 +15,7 @@ fn get_window_config() -> mq_prelude::Conf {
         window_title: String::from("lithium-editor"),
         window_width: 1600,
         window_height: 900,
-        window_resizable: false,
+        window_resizable: true,
         ..Default::default()
     }
 }
@@ -71,7 +71,7 @@ async fn main() {
 
         // reset force
         if simulate {
-            prelude::reset_force(&mut world, GRAVITY);
+            prelude::set_all_force(&mut world, GRAVITY);
         }
 
         // get mouse pos
@@ -80,7 +80,7 @@ async fn main() {
 
         // commands
         let delta_move =
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::LeftControl) || mq_prelude::is_key_down(mq_prelude::KeyCode::RightControl) {
+            if mq_prelude::is_key_down(mq_prelude::KeyCode::LeftShift) || mq_prelude::is_key_down(mq_prelude::KeyCode::RightShift) {
                 20.0
             } else {
                 5.0
@@ -146,22 +146,18 @@ async fn main() {
         }
 
         if simulate {
-            prelude::update_lin_vel(&mut world);
-            prelude::reset_rest(&mut world);
+            prelude::integrate_all_lin_vel(&mut world);
+            prelude::integrate_all_ang_vel(&mut world);
+            prelude::reset_all_rest(&mut world);
             prelude::resolve_collisions(&mut world, 10);
-            prelude::update_pos(&mut world);
-            prelude::update_rot_mat(&mut world);
+            prelude::integrate_all_pos(&mut world);
+            prelude::integrate_all_rot_mat(&mut world);
         }
 
         if let Some(entity) = dragging_entity {
-            world
-                .engine_mut()
-                .transform
-                .get_mut(entity)
-                .unwrap()
-                .set_pos(pointer_pos.add(pointer_rel_pos));
+            *world.engine_mut().transform.get_mut(entity).unwrap().pos_mut() = pointer_pos.add(pointer_rel_pos);
             if let Some(translation) = world.engine_mut().translation.get_mut(entity) {
-                translation.set_lin_vel(prelude::Vec2::zero());
+                *translation.lin_vel_mut() = prelude::Vec2::zero();
             }
         }
 
@@ -178,8 +174,9 @@ async fn main() {
         );
 
         let mut msg = String::new();
+        _ = write!(msg, "{}\n", camera.pos());
         _ = write!(msg, "controls:\n");
-        _ = write!(msg, "- wasd/arrows to move the camera (+Ctrl to move it quicker)\n");
+        _ = write!(msg, "- wasd/arrows to move the camera (+shift to move it quicker)\n");
         _ = write!(msg, "- R to reset the simulation to its original state\n");
         _ = write!(msg, "- P to toggle physics (physics: {})\n", simulate);
         _ = write!(

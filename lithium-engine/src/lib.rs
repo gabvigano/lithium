@@ -2,6 +2,7 @@ pub mod core;
 pub mod ecs;
 pub mod math;
 pub mod network;
+pub mod physics;
 pub mod renderer;
 
 pub mod prelude {
@@ -14,8 +15,6 @@ pub mod prelude {
     pub use crate::ecs::components::*;
     pub use crate::ecs::entities::*;
     pub use crate::ecs::storage::*;
-    pub use crate::ecs::systems::collisions::*;
-    pub use crate::ecs::systems::dynamics::*;
     pub use crate::ecs::world::*;
 
     pub use crate::math::algebra::*;
@@ -27,6 +26,9 @@ pub mod prelude {
     pub use crate::network::server::*;
     pub use crate::network::shared::*;
     pub use crate::network::snapshots::*;
+
+    pub use crate::physics::collisions::*;
+    pub use crate::physics::dynamics::*;
 
     pub use crate::renderer::mq_adapter::*;
     pub use crate::renderer::scene::*;
