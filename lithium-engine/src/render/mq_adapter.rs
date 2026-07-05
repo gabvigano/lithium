@@ -1,8 +1,4 @@
-use crate::{
-    ecs::{components, world},
-    math::{self, algebra},
-    renderer::scene,
-};
+use crate::{ecs, math, render};
 
 use macroquad::{math as mq_math, prelude as mq_prelude};
 
@@ -18,7 +14,7 @@ pub fn color_to_mq(color: math::Color) -> mq_prelude::Color {
     }
 }
 
-pub fn render<const N: usize>(world: &world::World<N>, camera: &scene::Camera) {
+pub fn render<const N: usize>(world: &ecs::World<N>, camera: &render::Camera) {
     // get reference of the material vector
     let mats = world.engine.material.get_comps();
 
@@ -26,7 +22,7 @@ pub fn render<const N: usize>(world: &world::World<N>, camera: &scene::Camera) {
     let ents = world.engine.material.get_ents();
 
     // zip vector toghether
-    let mut pairs: Vec<(&components::Material, &u32)> = mats.iter().zip(ents).collect();
+    let mut pairs: Vec<(&ecs::Material, &u32)> = mats.iter().zip(ents).collect();
 
     // sort by layer
     pairs.sort_by_key(|(m, _)| m.layer);
@@ -35,7 +31,7 @@ pub fn render<const N: usize>(world: &world::World<N>, camera: &scene::Camera) {
 
     for (material, &entity) in pairs {
         if material.show {
-            let Some(&components::Transform { pos, .. }) = world.engine.transform.get(entity) else {
+            let Some(&ecs::Transform { pos, .. }) = world.engine.transform.get(entity) else {
                 continue;
             };
             let Some(body) = world.engine.body.get(entity) else {
@@ -47,7 +43,7 @@ pub fn render<const N: usize>(world: &world::World<N>, camera: &scene::Camera) {
             let rot_mat = world.engine.rotation_matrix.get(entity);
             let rot_mat_is_none = rot_mat.is_none();
             let rot_mat = if rot_mat_is_none {
-                &algebra::IDENTITY_MAT2X3
+                &math::IDENTITY_MAT2X3
             } else {
                 &rot_mat.unwrap().rot_mat
             };

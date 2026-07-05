@@ -157,13 +157,16 @@ async fn main() {
 
             // handle user inputs
             if mq_prelude::is_key_down(mq_prelude::KeyCode::W) && world.engine().translation.get(player).unwrap().rest() {
-                prelude::apply_lin_vel_axis(&mut world, player, -12.0, prelude::Axis::Y, Some(-12.0));
+                prelude::apply_lin_vel_axis(&mut world, player, -12.0, prelude::Axis::Y);
+                prelude::clamp_min(&mut world.engine_mut().translation.get_mut(player).unwrap().lin_vel_mut().y, -12.0);
             }
             if mq_prelude::is_key_down(mq_prelude::KeyCode::D) {
-                prelude::apply_lin_vel_axis(&mut world, player, 1.0, prelude::Axis::X, Some(12.0)).unwrap();
+                prelude::apply_lin_vel_axis(&mut world, player, 1.0, prelude::Axis::X).unwrap();
+                prelude::clamp_max(&mut world.engine_mut().translation.get_mut(player).unwrap().lin_vel_mut().x, 12.0);
             }
             if mq_prelude::is_key_down(mq_prelude::KeyCode::A) {
-                prelude::apply_lin_vel_axis(&mut world, player, -1.0, prelude::Axis::X, Some(-12.0)).unwrap();
+                prelude::apply_lin_vel_axis(&mut world, player, -1.0, prelude::Axis::X).unwrap();
+                prelude::clamp_min(&mut world.engine_mut().translation.get_mut(player).unwrap().lin_vel_mut().x, -12.0);
             }
             if mq_prelude::is_key_pressed(mq_prelude::KeyCode::R) {
                 // reset environment

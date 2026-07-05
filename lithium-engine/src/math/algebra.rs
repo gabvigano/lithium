@@ -14,12 +14,18 @@ pub fn pow2(x: f32) -> f32 {
 }
 
 #[inline]
-pub fn clamp_toward_zero(value: f32, limit: Option<f32>) -> f32 {
-    match limit {
-        Some(limit) if limit > 0.0 => value.min(limit),
-        Some(limit) => value.max(limit),
-        None => value,
-    }
+pub fn clamp(value: &mut f32, min: f32, max: f32) {
+    *value = value.clamp(min, max)
+}
+
+#[inline]
+pub fn clamp_max(value: &mut f32, max: f32) {
+    *value = value.min(max);
+}
+
+#[inline]
+pub fn clamp_min(value: &mut f32, min: f32) {
+    *value = value.max(min);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Encode, Decode, Deserialize)]
@@ -245,6 +251,29 @@ impl fmt::Display for Vec2 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{:.4} , {:.4}]", self.x, self.y)
     }
+}
+
+/// dedup for slices that uses Vec2.approx_equal()
+pub fn dedup_by_approx_equal(slice: &mut [Vec2]) -> &mut [Vec2] {
+    let len = slice.len();
+    if len <= 1 {
+        return slice;
+    }
+
+    let mut read: usize = 1;
+    let mut write: usize = 1;
+
+    while read < len {
+        if !slice[read].approx_equal(slice[write - 1]) {
+            if read != write {
+                slice[write] = slice[read];
+            }
+            write += 1;
+        }
+        read += 1;
+    }
+
+    &mut slice[..write]
 }
 
 /// column-major 2x3 matrix; the matrix is like this

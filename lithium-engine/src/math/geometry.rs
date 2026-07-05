@@ -1,9 +1,6 @@
-use crate::{
-    core::error,
-    math::{self, Vec2},
-};
+use crate::{base, math};
 
-use std::fmt;
+use std::{fmt, mem};
 
 use bincode::{Decode, Encode};
 use serde::Deserialize;
@@ -135,41 +132,107 @@ impl fmt::Display for HitBox {
 }
 
 pub trait Validate {
-    fn validate(&self) -> Result<(), error::GeometryError>;
+    fn validate(&self) -> Result<(), base::GeometryError>;
+    fn normalize(&mut self) -> Result<(), base::GeometryError>;
 }
 
 pub trait Centroid {
     fn centroid(&self) -> math::Vec2;
 }
 
+pub trait ToHitBox {
+    fn to_hitbox(&self) -> HitBox;
+}
+
+pub trait SatCompatible {
+    fn sides_number(&self) -> usize;
+    fn append_sides(&self, sides: &mut Vec<math::Vec2>);
+    fn project(&self, axis: math::Vec2) -> (f32, f32);
+}
+
 pub trait ApplyTransformationVerts {
     type Output;
+    type OutputStep;
     fn apply_vec2(&self, vec: math::Vec2) -> Self::Output;
     fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output;
     fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output;
-}
-
-pub trait ApplyTransformationVertsStep {
-    type Output;
-    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output;
-    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output;
-    fn apply_mat2x3_then_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3)
-    -> Self::Output;
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::OutputStep;
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::OutputStep;
+    fn apply_mat2x3_then_vec2_step(
+        &self,
+        vec_1: math::Vec2,
+        vec_2: math::Vec2,
+        mat_1: &math::Mat2x3,
+        mat_2: &math::Mat2x3,
+    ) -> Self::OutputStep;
 }
 
 pub trait ApplyTransformationShape {
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
     where
         Self: Sized;
     fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self;
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
     where
         Self: Sized;
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self;
 }
 
-pub trait ToHitBox {
-    fn to_hitbox(&self) -> HitBox;
+/// generates a convex hull from a vector of points using monotone chain algorithm
+pub fn convex_hull(mut verts: &mut [math::Vec2]) -> Result<Polygon, base::GeometryError> {
+    if verts.len() < 3 {
+        return Err(base::GeometryError::TooFewVertices(verts.len()));
+    }
+
+    // sort by x and, if x is the same by y
+    verts.sort_unstable_by(|a, b| a.x.total_cmp(&b.x).then_with(|| a.y.total_cmp(&b.y)));
+
+    // remove near-duplicates
+    verts = math::dedup_by_approx_equal(verts);
+
+    if verts.len() < 3 {
+        return Err(base::GeometryError::TooFewVertices(verts.len()));
+    }
+
+    fn push_vert(boundary: &mut Vec<math::Vec2>, vert: math::Vec2, init_len: usize) {
+        while boundary.len() >= init_len {
+            let len = boundary.len();
+            if (boundary[len - 2]).signed_area(boundary[len - 1], vert) >= -math::EPS {
+                boundary.pop();
+            } else {
+                break;
+            }
+        }
+        boundary.push(vert);
+    }
+
+    let mut hull: Vec<math::Vec2> = Vec::with_capacity(verts.len() * 2);
+
+    // compute top boundary (clockwise from leftmost to rightmost)
+    for &v in verts.iter() {
+        push_vert(&mut hull, v, 2)
+    }
+
+    if !hull.is_empty() {
+        hull.pop();
+    }
+
+    let init_len = hull.len() + 2;
+
+    // compute bottom boundary (clockwise from rightmost to leftmost)
+    for &v in verts.iter().rev() {
+        push_vert(&mut hull, v, init_len);
+    }
+
+    if !hull.is_empty() {
+        hull.pop();
+    }
+
+    if hull.len() < 3 {
+        return Err(base::GeometryError::TooFewVertices(hull.len()));
+    }
+
+    Ok(Polygon::new_unchecked(hull))
 }
 
 #[derive(Debug, Clone)]
@@ -178,18 +241,106 @@ pub enum SweptShape {
     Changed(Polygon),
 }
 
-impl SweptShape {
+impl Validate for SweptShape {
     #[inline]
-    pub fn sides(&self) -> usize {
+    fn validate(&self) -> Result<(), base::GeometryError> {
+        match self {
+            SweptShape::Unchanged(shape) => shape.validate(),
+            SweptShape::Changed(swept) => swept.validate(),
+        }
+    }
+
+    #[inline]
+    fn normalize(&mut self) -> Result<(), base::GeometryError> {
+        match self {
+            SweptShape::Unchanged(shape) => shape.normalize(),
+            SweptShape::Changed(swept) => swept.normalize(),
+        }
+    }
+}
+
+impl Centroid for SweptShape {
+    #[inline]
+    fn centroid(&self) -> math::Vec2 {
+        match self {
+            SweptShape::Unchanged(shape) => shape.centroid(),
+            SweptShape::Changed(swept) => swept.centroid(),
+        }
+    }
+}
+
+impl ToHitBox for SweptShape {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        match self {
+            SweptShape::Unchanged(shape) => shape.to_hitbox(),
+            SweptShape::Changed(swept) => swept.to_hitbox(),
+        }
+    }
+}
+
+impl SatCompatible for SweptShape {
+    #[inline]
+    fn sides_number(&self) -> usize {
         match self {
             SweptShape::Unchanged(shape) => match shape {
-                Shape::Segment(_) => 1,
+                Shape::Segment(_) => 2,
                 Shape::Triangle(_) => 3,
                 Shape::Quad(_) => 4,
-                Shape::Polygon(polygon) => polygon.verts.len(),
+                Shape::Polygon(polygon) => polygon.sides_number(),
                 Shape::Circle(_) => unimplemented!(),
             },
-            SweptShape::Changed(polygon) => polygon.verts.len(),
+            SweptShape::Changed(polygon) => polygon.sides_number(),
+        }
+    }
+
+    #[inline]
+    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
+        match self {
+            SweptShape::Unchanged(shape) => shape.append_sides(sides),
+            SweptShape::Changed(swept) => swept.append_sides(sides),
+        }
+    }
+
+    #[inline]
+    fn project(&self, axis: math::Vec2) -> (f32, f32) {
+        match self {
+            SweptShape::Unchanged(shape) => shape.project(axis),
+            SweptShape::Changed(swept) => swept.project(axis),
+        }
+    }
+}
+
+impl ApplyTransformationShape for SweptShape {
+    #[inline]
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
+        Ok(match self {
+            SweptShape::Unchanged(shape) => SweptShape::Unchanged(shape.apply_vec2_checked(vec)?),
+            SweptShape::Changed(swept) => SweptShape::Changed(swept.apply_vec2_checked(vec)?),
+        })
+    }
+
+    #[inline]
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self {
+        match self {
+            SweptShape::Unchanged(shape) => SweptShape::Unchanged(shape.apply_vec2_unchecked(vec)),
+            SweptShape::Changed(swept) => SweptShape::Changed(swept.apply_vec2_unchecked(vec)),
+        }
+    }
+
+    #[inline]
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Ok(match self {
+            SweptShape::Unchanged(shape) => SweptShape::Unchanged(shape.apply_mat2x3_checked(mat)?),
+            SweptShape::Changed(swept) => SweptShape::Changed(swept.apply_mat2x3_checked(mat)?),
+        })
+    }
+
+    #[inline]
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
+        match self {
+            SweptShape::Unchanged(shape) => SweptShape::Unchanged(shape.apply_mat2x3_unchecked(mat)),
+            SweptShape::Changed(swept) => SweptShape::Changed(swept.apply_mat2x3_unchecked(mat)),
         }
     }
 }
@@ -205,12 +356,25 @@ pub enum Shape {
 
 impl Validate for Shape {
     #[inline]
-    fn validate(&self) -> Result<(), error::GeometryError> {
+    fn validate(&self) -> Result<(), base::GeometryError> {
         match self {
             Shape::Segment(segment) => segment.validate()?,
             Shape::Triangle(triangle) => triangle.validate()?,
             Shape::Quad(quad) => quad.validate()?,
             Shape::Polygon(polygon) => polygon.validate()?,
+            Shape::Circle(_) => unimplemented!(),
+        };
+
+        Ok(())
+    }
+
+    #[inline]
+    fn normalize(&mut self) -> Result<(), base::GeometryError> {
+        match self {
+            Shape::Segment(segment) => segment.normalize()?,
+            Shape::Triangle(triangle) => triangle.normalize()?,
+            Shape::Quad(quad) => quad.normalize()?,
+            Shape::Polygon(polygon) => polygon.normalize()?,
             Shape::Circle(_) => unimplemented!(),
         };
 
@@ -231,9 +395,57 @@ impl Centroid for Shape {
     }
 }
 
+impl ToHitBox for Shape {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        match self {
+            Shape::Segment(segment) => segment.to_hitbox(),
+            Shape::Triangle(triangle) => triangle.to_hitbox(),
+            Shape::Quad(quad) => quad.to_hitbox(),
+            Shape::Polygon(polygon) => polygon.to_hitbox(),
+            Shape::Circle(circle) => circle.to_hitbox(),
+        }
+    }
+}
+
+impl SatCompatible for Shape {
+    #[inline]
+    fn sides_number(&self) -> usize {
+        match self {
+            Shape::Segment(_) => 2,
+            Shape::Triangle(_) => 3,
+            Shape::Quad(_) => 4,
+            Shape::Polygon(polygon) => polygon.sides_number(),
+            Shape::Circle(_) => unimplemented!(),
+        }
+    }
+
+    #[inline]
+    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
+        match self {
+            Shape::Segment(segment) => segment.append_sides(sides),
+            Shape::Triangle(triangle) => triangle.append_sides(sides),
+            Shape::Quad(quad) => quad.append_sides(sides),
+            Shape::Polygon(polygon) => polygon.append_sides(sides),
+            Shape::Circle(_) => unimplemented!(),
+        }
+    }
+
+    #[inline]
+    fn project(&self, axis: math::Vec2) -> (f32, f32) {
+        match self {
+            Shape::Segment(segment) => segment.project(axis),
+            Shape::Triangle(triangle) => triangle.project(axis),
+            Shape::Quad(quad) => quad.project(axis),
+            Shape::Polygon(polygon) => polygon.project(axis),
+            Shape::Circle(_) => unimplemented!(),
+        }
+    }
+}
+
 impl ApplyTransformationShape for Shape {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError> {
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
         Ok(match self {
             Shape::Segment(segment) => Shape::Segment(segment.apply_vec2_checked(vec)?),
             Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_vec2_checked(vec)?),
@@ -255,7 +467,7 @@ impl ApplyTransformationShape for Shape {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError> {
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
         Ok(match self {
             Shape::Segment(segment) => Shape::Segment(segment.apply_mat2x3_checked(mat)?),
             Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_mat2x3_checked(mat)?),
@@ -273,19 +485,6 @@ impl ApplyTransformationShape for Shape {
             Shape::Quad(quad) => Shape::Quad(quad.apply_mat2x3_unchecked(mat)),
             Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_mat2x3_unchecked(mat)),
             Shape::Circle(_) => unimplemented!(),
-        }
-    }
-}
-
-impl ToHitBox for Shape {
-    #[inline]
-    fn to_hitbox(&self) -> HitBox {
-        match self {
-            Shape::Segment(segment) => segment.to_hitbox(),
-            Shape::Triangle(triangle) => triangle.to_hitbox(),
-            Shape::Quad(quad) => quad.to_hitbox(),
-            Shape::Polygon(polygon) => polygon.to_hitbox(),
-            Shape::Circle(circle) => circle.to_hitbox(),
         }
     }
 }
@@ -311,7 +510,7 @@ pub struct Segment {
 
 impl Segment {
     #[inline]
-    pub fn new(a: math::Vec2, b: math::Vec2) -> Result<Self, error::GeometryError> {
+    pub fn new(a: math::Vec2, b: math::Vec2) -> Result<Self, base::GeometryError> {
         let segment = Self { a, b };
 
         segment.validate()?;
@@ -399,12 +598,17 @@ impl Segment {
 
 impl Validate for Segment {
     #[inline]
-    fn validate(&self) -> Result<(), error::GeometryError> {
+    fn validate(&self) -> Result<(), base::GeometryError> {
         // check duplicates vertices
         if self.a.square_dist(self.b) < math::EPS_SQR {
-            return Err(error::GeometryError::DuplicateVertices);
+            return Err(base::GeometryError::DuplicateVertices);
         };
 
+        Ok(())
+    }
+
+    #[inline]
+    fn normalize(&mut self) -> Result<(), base::GeometryError> {
         Ok(())
     }
 }
@@ -416,8 +620,37 @@ impl Centroid for Segment {
     }
 }
 
+impl ToHitBox for Segment {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        HitBox::from_verts_array(&[self.a, self.b])
+    }
+}
+
+impl SatCompatible for Segment {
+    #[inline]
+    fn sides_number(&self) -> usize {
+        2
+    }
+
+    #[inline]
+    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
+        let segment_side = self.b.sub(self.a);
+        if segment_side.square_mag() > math::EPS_SQR {
+            sides.push(segment_side)
+        }
+    }
+
+    #[inline]
+    fn project(&self, axis: math::Vec2) -> (f32, f32) {
+        let (a_proj, b_proj) = (self.a.dot(axis), self.b.dot(axis));
+        (a_proj.min(b_proj), a_proj.max(b_proj))
+    }
+}
+
 impl ApplyTransformationVerts for Segment {
-    type Output = [Vec2; 2];
+    type Output = [math::Vec2; 2];
+    type OutputStep = [math::Vec2; 4];
 
     #[inline]
     fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
@@ -433,18 +666,14 @@ impl ApplyTransformationVerts for Segment {
     fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output {
         [mat.pre_mul_vec2(self.a).add(vec), mat.pre_mul_vec2(self.b).add(vec)]
     }
-}
-
-impl ApplyTransformationVertsStep for Segment {
-    type Output = [Vec2; 4];
 
     #[inline]
-    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::OutputStep {
         [self.a.add(vec_1), self.b.add(vec_1), self.a.add(vec_2), self.b.add(vec_2)]
     }
 
     #[inline]
-    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::OutputStep {
         [
             mat_1.pre_mul_vec2(self.a),
             mat_1.pre_mul_vec2(self.b),
@@ -460,7 +689,7 @@ impl ApplyTransformationVertsStep for Segment {
         vec_2: math::Vec2,
         mat_1: &math::Mat2x3,
         mat_2: &math::Mat2x3,
-    ) -> Self::Output {
+    ) -> Self::OutputStep {
         [
             mat_1.pre_mul_vec2(self.a).add(vec_1),
             mat_1.pre_mul_vec2(self.b).add(vec_1),
@@ -472,7 +701,7 @@ impl ApplyTransformationVertsStep for Segment {
 
 impl ApplyTransformationShape for Segment {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -485,7 +714,7 @@ impl ApplyTransformationShape for Segment {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -495,13 +724,6 @@ impl ApplyTransformationShape for Segment {
     #[inline]
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
         Self::new_unchecked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
-    }
-}
-
-impl ToHitBox for Segment {
-    #[inline]
-    fn to_hitbox(&self) -> HitBox {
-        HitBox::from_verts_array(&[self.a, self.b])
     }
 }
 
@@ -521,7 +743,7 @@ pub struct Triangle {
 
 impl Triangle {
     #[inline]
-    pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Result<Self, error::GeometryError> {
+    pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Result<Self, base::GeometryError> {
         let triangle = Self { a, b, c };
 
         triangle.validate()?;
@@ -532,6 +754,20 @@ impl Triangle {
     #[inline]
     pub fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Self {
         Self { a, b, c }
+    }
+
+    #[inline]
+    pub fn from_hull(mut verts: &mut [math::Vec2]) -> Result<Triangle, base::GeometryError> {
+        verts = math::dedup_by_approx_equal(verts);
+
+        if verts.len() != 3 {
+            return Err(base::GeometryError::TooFewVertices(verts.len()));
+        }
+
+        let mut triangle = Triangle::new_unchecked(verts[0], verts[1], verts[2]);
+        triangle.normalize()?;
+
+        Ok(triangle)
     }
 
     #[inline]
@@ -567,14 +803,28 @@ impl Triangle {
 
 impl Validate for Triangle {
     #[inline]
-    fn validate(&self) -> Result<(), error::GeometryError> {
+    fn validate(&self) -> Result<(), base::GeometryError> {
         // check duplicates vertices
         if self.a.square_dist(self.b) < math::EPS_SQR
             || self.a.square_dist(self.c) < math::EPS_SQR
             || self.b.square_dist(self.c) < math::EPS_SQR
         {
-            return Err(error::GeometryError::DuplicateVertices);
+            return Err(base::GeometryError::DuplicateVertices);
         };
+
+        // check non-collinear + clockwise winding
+        if self.a.signed_area(self.b, self.c) >= -math::EPS {
+            return Err(base::GeometryError::NotConvex);
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn normalize(&mut self) -> Result<(), base::GeometryError> {
+        if self.a.signed_area(self.b, self.c) > 0.0 {
+            mem::swap(&mut self.b, &mut self.c);
+        }
 
         Ok(())
     }
@@ -587,8 +837,39 @@ impl Centroid for Triangle {
     }
 }
 
+impl ToHitBox for Triangle {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        HitBox::from_verts_array(&[self.a, self.b, self.c])
+    }
+}
+
+impl SatCompatible for Triangle {
+    #[inline]
+    fn sides_number(&self) -> usize {
+        3
+    }
+
+    #[inline]
+    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
+        let triangle_sides = [self.b.sub(self.a), self.c.sub(self.b), self.a.sub(self.c)];
+        for triangle_side in triangle_sides {
+            if triangle_side.square_mag() > math::EPS_SQR {
+                sides.push(triangle_side);
+            }
+        }
+    }
+
+    #[inline]
+    fn project(&self, axis: math::Vec2) -> (f32, f32) {
+        let (a_proj, b_proj, c_proj) = (self.a.dot(axis), self.b.dot(axis), self.c.dot(axis));
+        (a_proj.min(b_proj).min(c_proj), a_proj.max(b_proj).max(c_proj))
+    }
+}
+
 impl ApplyTransformationVerts for Triangle {
-    type Output = [Vec2; 3];
+    type Output = [math::Vec2; 3];
+    type OutputStep = [math::Vec2; 6];
 
     #[inline]
     fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
@@ -608,13 +889,9 @@ impl ApplyTransformationVerts for Triangle {
             mat.pre_mul_vec2(self.c).add(vec),
         ]
     }
-}
-
-impl ApplyTransformationVertsStep for Triangle {
-    type Output = [Vec2; 6];
 
     #[inline]
-    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::OutputStep {
         [
             self.a.add(vec_1),
             self.b.add(vec_1),
@@ -626,7 +903,7 @@ impl ApplyTransformationVertsStep for Triangle {
     }
 
     #[inline]
-    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::OutputStep {
         [
             mat_1.pre_mul_vec2(self.a),
             mat_1.pre_mul_vec2(self.b),
@@ -644,7 +921,7 @@ impl ApplyTransformationVertsStep for Triangle {
         vec_2: math::Vec2,
         mat_1: &math::Mat2x3,
         mat_2: &math::Mat2x3,
-    ) -> Self::Output {
+    ) -> Self::OutputStep {
         [
             mat_1.pre_mul_vec2(self.a).add(vec_1),
             mat_1.pre_mul_vec2(self.b).add(vec_1),
@@ -658,7 +935,7 @@ impl ApplyTransformationVertsStep for Triangle {
 
 impl ApplyTransformationShape for Triangle {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -671,7 +948,7 @@ impl ApplyTransformationShape for Triangle {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -681,13 +958,6 @@ impl ApplyTransformationShape for Triangle {
     #[inline]
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
         Self::new_unchecked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c))
-    }
-}
-
-impl ToHitBox for Triangle {
-    #[inline]
-    fn to_hitbox(&self) -> HitBox {
-        HitBox::from_verts_array(&[self.a, self.b, self.c])
     }
 }
 
@@ -705,7 +975,7 @@ pub struct Rect {
 
 impl Rect {
     #[inline]
-    pub fn new(width: f32, height: f32) -> Result<Self, error::MathError> {
+    pub fn new(width: f32, height: f32) -> Result<Self, base::MathError> {
         let rect = Self { width, height };
 
         rect.validate()?;
@@ -714,13 +984,13 @@ impl Rect {
     }
 
     #[inline]
-    pub fn validate(&self) -> Result<(), error::MathError> {
+    pub fn validate(&self) -> Result<(), base::MathError> {
         if self.width <= 0.0 {
-            return Err(error::MathError::NonPositive("width"));
+            return Err(base::MathError::NonPositive("width"));
         }
 
         if self.height <= 0.0 {
-            return Err(error::MathError::NonPositive("height"));
+            return Err(base::MathError::NonPositive("height"));
         }
 
         Ok(())
@@ -771,7 +1041,7 @@ pub struct Quad {
 
 impl Quad {
     #[inline]
-    pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Result<Self, error::GeometryError> {
+    pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Result<Self, base::GeometryError> {
         let quad = Self { a, b, c, d };
 
         quad.validate()?;
@@ -782,6 +1052,18 @@ impl Quad {
     #[inline]
     pub fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Self {
         Self { a, b, c, d }
+    }
+
+    #[inline]
+    pub fn from_hull(verts: &mut [math::Vec2]) -> Result<Quad, base::GeometryError> {
+        let hull = convex_hull(verts)?;
+
+        let verts_len = hull.verts.len();
+        if verts_len != 4 {
+            return Err(base::GeometryError::NormalizationError);
+        }
+
+        Ok(Quad::new_unchecked(hull.verts[0], hull.verts[1], hull.verts[2], hull.verts[3]))
     }
 
     #[inline]
@@ -827,7 +1109,7 @@ impl Quad {
 
 impl Validate for Quad {
     #[inline]
-    fn validate(&self) -> Result<(), error::GeometryError> {
+    fn validate(&self) -> Result<(), base::GeometryError> {
         // check duplicates vertices
         if self.a.square_dist(self.b) < math::EPS_SQR
             || self.a.square_dist(self.c) < math::EPS_SQR
@@ -836,7 +1118,7 @@ impl Validate for Quad {
             || self.b.square_dist(self.d) < math::EPS_SQR
             || self.c.square_dist(self.d) < math::EPS_SQR
         {
-            return Err(error::GeometryError::DuplicateVertices);
+            return Err(base::GeometryError::DuplicateVertices);
         };
 
         // check if the quadrilateral is convex
@@ -845,8 +1127,17 @@ impl Validate for Quad {
             || self.c.signed_area(self.d, self.a) >= -math::EPS
             || self.d.signed_area(self.a, self.b) >= -math::EPS
         {
-            return Err(error::GeometryError::NotConvex);
+            return Err(base::GeometryError::NotConvex);
         }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn normalize(&mut self) -> Result<(), base::GeometryError> {
+        let mut verts = [self.a, self.b, self.c, self.d];
+
+        *self = Self::from_hull(&mut verts)?;
 
         Ok(())
     }
@@ -859,8 +1150,42 @@ impl Centroid for Quad {
     }
 }
 
+impl ToHitBox for Quad {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        HitBox::from_verts_array(&[self.a, self.b, self.c, self.d])
+    }
+}
+
+impl SatCompatible for Quad {
+    #[inline]
+    fn sides_number(&self) -> usize {
+        4
+    }
+
+    #[inline]
+    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
+        let quad_sides = [self.b.sub(self.a), self.c.sub(self.b), self.d.sub(self.c), self.a.sub(self.d)];
+        for quad_side in quad_sides {
+            if quad_side.square_mag() > math::EPS_SQR {
+                sides.push(quad_side);
+            }
+        }
+    }
+
+    #[inline]
+    fn project(&self, axis: math::Vec2) -> (f32, f32) {
+        let (a_proj, b_proj, c_proj, d_proj) = (self.a.dot(axis), self.b.dot(axis), self.c.dot(axis), self.d.dot(axis));
+        (
+            a_proj.min(b_proj).min(c_proj).min(d_proj),
+            a_proj.max(b_proj).max(c_proj).max(d_proj),
+        )
+    }
+}
+
 impl ApplyTransformationVerts for Quad {
-    type Output = [Vec2; 4];
+    type Output = [math::Vec2; 4];
+    type OutputStep = [math::Vec2; 8];
 
     #[inline]
     fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
@@ -886,13 +1211,9 @@ impl ApplyTransformationVerts for Quad {
             mat.pre_mul_vec2(self.d).add(vec),
         ]
     }
-}
-
-impl ApplyTransformationVertsStep for Quad {
-    type Output = [Vec2; 8];
 
     #[inline]
-    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::OutputStep {
         [
             self.a.add(vec_1),
             self.b.add(vec_1),
@@ -906,7 +1227,7 @@ impl ApplyTransformationVertsStep for Quad {
     }
 
     #[inline]
-    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::OutputStep {
         [
             mat_1.pre_mul_vec2(self.a),
             mat_1.pre_mul_vec2(self.b),
@@ -926,7 +1247,7 @@ impl ApplyTransformationVertsStep for Quad {
         vec_2: math::Vec2,
         mat_1: &math::Mat2x3,
         mat_2: &math::Mat2x3,
-    ) -> Self::Output {
+    ) -> Self::OutputStep {
         [
             mat_1.pre_mul_vec2(self.a).add(vec_1),
             mat_1.pre_mul_vec2(self.b).add(vec_1),
@@ -942,7 +1263,7 @@ impl ApplyTransformationVertsStep for Quad {
 
 impl ApplyTransformationShape for Quad {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -955,7 +1276,7 @@ impl ApplyTransformationShape for Quad {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -978,13 +1299,6 @@ impl ApplyTransformationShape for Quad {
     }
 }
 
-impl ToHitBox for Quad {
-    #[inline]
-    fn to_hitbox(&self) -> HitBox {
-        HitBox::from_verts_array(&[self.a, self.b, self.c, self.d])
-    }
-}
-
 impl fmt::Display for Quad {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "quadrilateral ({}, {}, {}, {})", self.a, self.b, self.c, self.d)
@@ -1000,7 +1314,7 @@ pub struct Polygon {
 
 impl Polygon {
     #[inline]
-    pub fn new(verts: Vec<math::Vec2>) -> Result<Self, error::GeometryError> {
+    pub fn new(verts: Vec<math::Vec2>) -> Result<Self, base::GeometryError> {
         let polygon = Self { verts };
 
         polygon.validate()?;
@@ -1011,6 +1325,11 @@ impl Polygon {
     #[inline]
     pub fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
         Self { verts }
+    }
+
+    #[inline]
+    pub fn from_hull(verts: &mut [math::Vec2]) -> Result<Polygon, base::GeometryError> {
+        convex_hull(verts)
     }
 
     #[inline]
@@ -1030,11 +1349,11 @@ impl Polygon {
 }
 
 impl Validate for Polygon {
-    fn validate(&self) -> Result<(), error::GeometryError> {
+    fn validate(&self) -> Result<(), base::GeometryError> {
         let verts_len = self.verts.len();
 
         if verts_len < 3 {
-            return Err(error::GeometryError::TooFewVertices(verts_len));
+            return Err(base::GeometryError::TooFewVertices(verts_len));
         } else if verts_len == 3 {
             eprintln!("warning: polygon with 3 vertices, consider Shape::Triangle for efficiency");
         } else if verts_len == 4 {
@@ -1045,7 +1364,7 @@ impl Validate for Polygon {
         for i in 0..verts_len {
             for j in (i + 1)..verts_len {
                 if self.verts[i].square_dist(self.verts[j]) < math::EPS_SQR {
-                    return Err(error::GeometryError::DuplicateVertices);
+                    return Err(base::GeometryError::DuplicateVertices);
                 }
             }
         }
@@ -1058,9 +1377,24 @@ impl Validate for Polygon {
             let area = self.verts[i].signed_area(self.verts[i1], self.verts[i2]);
 
             if area >= -math::EPS {
-                return Err(error::GeometryError::NotConvex);
+                return Err(base::GeometryError::NotConvex);
             }
         }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn normalize(&mut self) -> Result<(), base::GeometryError> {
+        let mut verts = self.verts.clone();
+
+        let normalized = Self::from_hull(&mut verts)?;
+
+        if self.verts.len() != normalized.verts.len() {
+            return Err(base::GeometryError::NormalizationError);
+        }
+
+        *self = normalized;
 
         Ok(())
     }
@@ -1077,8 +1411,53 @@ impl Centroid for Polygon {
     }
 }
 
+impl ToHitBox for Polygon {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        HitBox::from_verts_slice(&self.verts)
+    }
+}
+
+impl SatCompatible for Polygon {
+    #[inline]
+    fn sides_number(&self) -> usize {
+        self.verts().len()
+    }
+
+    #[inline]
+    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
+        let verts = &self.verts;
+        let mut prev = *verts.last().unwrap();
+        for &curr in verts {
+            let side = curr.sub(prev);
+            if side.square_mag() > math::EPS_SQR {
+                sides.push(side);
+            }
+            prev = curr;
+        }
+    }
+
+    #[inline]
+    fn project(&self, axis: math::Vec2) -> (f32, f32) {
+        let mut min = self.verts[0].dot(axis);
+        let mut max = min;
+
+        for vert in self.verts.iter().skip(1) {
+            let proj = vert.dot(axis);
+            if proj < min {
+                min = proj;
+            }
+            if proj > max {
+                max = proj;
+            }
+        }
+        (min, max)
+    }
+}
+
 impl ApplyTransformationVerts for Polygon {
-    type Output = Vec<Vec2>;
+    type Output = Vec<math::Vec2>;
+    type OutputStep = Vec<math::Vec2>;
 
     #[inline]
     fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
@@ -1112,13 +1491,9 @@ impl ApplyTransformationVerts for Polygon {
 
         verts
     }
-}
-
-impl ApplyTransformationVertsStep for Polygon {
-    type Output = Vec<Vec2>;
 
     #[inline]
-    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::Output {
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::OutputStep {
         let mut verts = Vec::with_capacity(self.verts.len() * 2);
 
         for vert in self.verts.iter() {
@@ -1130,7 +1505,7 @@ impl ApplyTransformationVertsStep for Polygon {
     }
 
     #[inline]
-    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::Output {
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::OutputStep {
         let mut verts = Vec::with_capacity(self.verts.len() * 2);
 
         for vert in self.verts.iter() {
@@ -1148,7 +1523,7 @@ impl ApplyTransformationVertsStep for Polygon {
         vec_2: math::Vec2,
         mat_1: &math::Mat2x3,
         mat_2: &math::Mat2x3,
-    ) -> Self::Output {
+    ) -> Self::OutputStep {
         let mut verts = Vec::with_capacity(self.verts.len() * 2);
 
         for vert in self.verts.iter() {
@@ -1162,7 +1537,7 @@ impl ApplyTransformationVertsStep for Polygon {
 
 impl ApplyTransformationShape for Polygon {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, error::GeometryError>
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -1175,7 +1550,7 @@ impl ApplyTransformationShape for Polygon {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, error::GeometryError>
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
     where
         Self: Sized,
     {
@@ -1185,13 +1560,6 @@ impl ApplyTransformationShape for Polygon {
     #[inline]
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
         Self::new_unchecked(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect())
-    }
-}
-
-impl ToHitBox for Polygon {
-    #[inline]
-    fn to_hitbox(&self) -> HitBox {
-        HitBox::from_verts_slice(&self.verts)
     }
 }
 
@@ -1215,7 +1583,7 @@ pub struct Circle {
 
 impl Circle {
     #[inline]
-    pub fn new(radius: f32) -> Result<Self, error::MathError> {
+    pub fn new(radius: f32) -> Result<Self, base::MathError> {
         let circle = Self { radius };
 
         circle.validate()?;
@@ -1224,9 +1592,9 @@ impl Circle {
     }
 
     #[inline]
-    pub fn validate(&self) -> Result<(), error::MathError> {
+    pub fn validate(&self) -> Result<(), base::MathError> {
         if self.radius <= 0.0 {
-            return Err(error::MathError::NonPositive("radius"));
+            return Err(base::MathError::NonPositive("radius"));
         }
 
         Ok(())

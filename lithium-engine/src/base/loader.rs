@@ -1,8 +1,5 @@
-use crate::{
-    core::error,
-    ecs::{components, entities, world},
-    math::geometry::Validate,
-};
+use crate::math::Validate;
+use crate::{base, ecs};
 
 use std::{collections::HashMap, fs};
 
@@ -23,7 +20,7 @@ pub struct AssetCache {
     pub path: String,
     pub metadata: std::time::SystemTime,
     pub raw_file: String,
-    pub entity_map: HashMap<u32, entities::Entity>,
+    pub entity_map: HashMap<u32, ecs::Entity>,
     pub storage: HashMap<ComponentKey, Value>,
 }
 
@@ -34,27 +31,27 @@ pub fn read_metadata(path: &str) -> Result<std::time::SystemTime, std::io::Error
 }
 
 #[inline]
-pub fn read_raw_file(path: &str) -> Result<String, error::FileError> {
+pub fn read_raw_file(path: &str) -> Result<String, base::FileError> {
     Ok(std::fs::read_to_string(path)?)
 }
 
 #[inline]
-pub fn parse_file(file: &str) -> Result<Vec<LoadableComponent>, error::FileError> {
-    Ok(serde_yaml::from_str(&file).map_err(error::FileError::from)?)
+pub fn parse_file(file: &str) -> Result<Vec<LoadableComponent>, base::FileError> {
+    Ok(serde_yaml::from_str(&file).map_err(base::FileError::from)?)
 }
 
 #[inline]
 pub fn load<const N: usize>(
     path: &str,
-    world: &mut world::World<N>,
-    entity_manager: &mut entities::EntityManager,
-    match_user_upsert_option: Option<fn(&mut world::World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
-) -> Result<AssetCache, error::EngineError> {
-    let metadata = read_metadata(path).map_err(error::FileError::from)?;
+    world: &mut ecs::World<N>,
+    entity_manager: &mut ecs::EntityManager,
+    match_user_upsert_option: Option<fn(&mut ecs::World<N>, ecs::Entity, &str, Value) -> Result<(), base::EngineError>>,
+) -> Result<AssetCache, base::EngineError> {
+    let metadata = read_metadata(path).map_err(base::FileError::from)?;
     let raw_file = read_raw_file(path)?;
     let parsed_file = parse_file(&raw_file)?;
     let parsed_file_len = parsed_file.len();
-    let mut entity_map: HashMap<FileEntity, entities::Entity> = HashMap::with_capacity(parsed_file_len / 6);
+    let mut entity_map: HashMap<FileEntity, ecs::Entity> = HashMap::with_capacity(parsed_file_len / 6);
     let mut storage: HashMap<ComponentKey, Value> = HashMap::with_capacity(parsed_file_len);
 
     match match_user_upsert_option {
@@ -91,13 +88,13 @@ pub fn load<const N: usize>(
 #[inline]
 pub fn hot_reload<const N: usize>(
     cache: &mut AssetCache,
-    world: &mut world::World<N>,
-    entity_manager: &mut entities::EntityManager,
-    match_user_upsert_option: Option<fn(&mut world::World<N>, entities::Entity, &str, Value) -> Result<(), error::EngineError>>,
-    match_user_remove_option: Option<fn(&mut world::World<N>, entities::Entity, &str)>,
-) -> Result<(), error::EngineError> {
+    world: &mut ecs::World<N>,
+    entity_manager: &mut ecs::EntityManager,
+    match_user_upsert_option: Option<fn(&mut ecs::World<N>, ecs::Entity, &str, Value) -> Result<(), base::EngineError>>,
+    match_user_remove_option: Option<fn(&mut ecs::World<N>, ecs::Entity, &str)>,
+) -> Result<(), base::EngineError> {
     let path = cache.path.as_str();
-    let new_metadata = read_metadata(&cache.path).map_err(error::FileError::from)?;
+    let new_metadata = read_metadata(&cache.path).map_err(base::FileError::from)?;
 
     if new_metadata == cache.metadata {
         // file hasn't changed
@@ -211,46 +208,51 @@ pub fn hot_reload<const N: usize>(
 }
 
 fn match_engine_upsert<const N: usize>(
-    world: &mut world::World<N>,
-    entity: entities::Entity,
+    world: &mut ecs::World<N>,
+    entity: ecs::Entity,
     kind: &str,
     data: Value,
-) -> Result<(), error::EngineError> {
+) -> Result<(), base::EngineError> {
     match kind {
         "transform" => {
-            let transform_spec = components::TransformSpec::deserialize(data).map_err(error::FileError::from)?;
+            let transform_spec = ecs::TransformSpec::deserialize(data).map_err(base::FileError::from)?;
             world.engine.transform.upsert(entity, transform_spec.into());
             Ok(())
         }
         "rotation_matrix" => {
-            let rot_mat_spec = components::RotationMatrixSpec::deserialize(data).map_err(error::FileError::from)?;
+            let rot_mat_spec = ecs::RotationMatrixSpec::deserialize(data).map_err(base::FileError::from)?;
             world.engine.rotation_matrix.upsert(entity, rot_mat_spec.to_rot_mat());
             Ok(())
         }
         "translation" => {
-            let translation_spec = components::TranslationSpec::deserialize(data).map_err(error::FileError::from)?;
+            let translation_spec = ecs::TranslationSpec::deserialize(data).map_err(base::FileError::from)?;
             world.engine.translation.upsert(entity, translation_spec.try_into()?);
             Ok(())
         }
         "rotation" => {
-            let rotation_spec = components::RotationSpec::deserialize(data).map_err(error::FileError::from)?;
+            let rotation_spec = ecs::RotationSpec::deserialize(data).map_err(base::FileError::from)?;
             world.engine.rotation.upsert(entity, rotation_spec.try_into()?);
             Ok(())
         }
         "surface" => {
-            let surface_spec = components::SurfaceSpec::deserialize(data).map_err(error::FileError::from)?;
+            let surface_spec = ecs::SurfaceSpec::deserialize(data).map_err(base::FileError::from)?;
             world.engine.surface.upsert(entity, surface_spec.into());
             Ok(())
         }
         "body" => {
-            let body_spec = components::BodySpec::deserialize(data).map_err(error::FileError::from)?;
-            let body: components::Body = body_spec.into();
-            body.shape().validate()?;
+            let body_spec = ecs::BodySpec::deserialize(data).map_err(base::FileError::from)?;
+            let mut body: ecs::Body = body_spec.into();
+
+            // normalize vertices, reject duplicates or non-convex input
+            // this is much more flexible at the cost of losing information about what causes the error
+            body.shape.normalize()?;
+            body.shape.validate()?;
+
             world.engine.body.upsert(entity, body);
             Ok(())
         }
         "material" => {
-            let material_spec = components::MaterialSpec::deserialize(data).map_err(error::FileError::from)?;
+            let material_spec = ecs::MaterialSpec::deserialize(data).map_err(base::FileError::from)?;
             world.engine.material.upsert(entity, material_spec.into());
             Ok(())
         }
@@ -258,7 +260,7 @@ fn match_engine_upsert<const N: usize>(
     }
 }
 
-fn match_engine_remove<const N: usize>(world: &mut world::World<N>, entity: entities::Entity, kind: &str) {
+fn match_engine_remove<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity, kind: &str) {
     match kind {
         "transform" => {
             world.engine.transform.remove(entity);

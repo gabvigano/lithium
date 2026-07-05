@@ -1,4 +1,4 @@
-use crate::{math, renderer::scene};
+use crate::{math, render};
 
 use macroquad::prelude;
 
@@ -6,7 +6,7 @@ pub fn render_vector(
     mut start_pos: math::Vec2,
     mut vec: math::Vec2,
     scale: Option<f32>,
-    camera: &scene::Camera,
+    camera: &render::Camera,
     color: prelude::Color,
     compose: bool,
 ) {

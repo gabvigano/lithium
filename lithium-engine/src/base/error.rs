@@ -1,4 +1,4 @@
-use crate::ecs::entities;
+use crate::ecs;
 
 use std::{error, fmt, io};
 
@@ -88,8 +88,8 @@ impl From<serde_yaml::Error> for FileError {
 pub enum ComponentError {
     ComponentOutOfRange(usize),
     MismatchingComponent(),
-    ComponentNotFound(entities::Entity),
-    DuplicateComponent(entities::Entity),
+    ComponentNotFound(ecs::Entity),
+    DuplicateComponent(ecs::Entity),
 }
 
 impl error::Error for ComponentError {}
@@ -133,6 +133,7 @@ pub enum GeometryError {
     TooFewVertices(usize),
     DuplicateVertices,
     NotConvex,
+    NormalizationError,
 }
 
 impl error::Error for GeometryError {}
@@ -143,6 +144,7 @@ impl fmt::Display for GeometryError {
             GeometryError::TooFewVertices(verts) => write!(f, "cannot build this shape with only {verts} vertices"),
             GeometryError::DuplicateVertices => write!(f, "shape has overlapping or duplicate vertices"),
             GeometryError::NotConvex => write!(f, "shape must be convex"),
+            GeometryError::NormalizationError => write!(f, "number of vertices changed during normalization"),
         }
     }
 }

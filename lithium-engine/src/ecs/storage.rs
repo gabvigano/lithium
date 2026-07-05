@@ -1,7 +1,4 @@
-use crate::{
-    core::error,
-    ecs::{components, entities},
-};
+use crate::{base, ecs};
 
 use std::any::Any;
 
@@ -12,7 +9,7 @@ use std::any::Any;
 #[derive(Debug, Clone)]
 pub struct SparseSet<T> {
     components: Vec<T>,
-    entities: Vec<entities::Entity>,
+    entities: Vec<ecs::Entity>,
     sparse: Vec<Option<usize>>,
 }
 
@@ -27,7 +24,7 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    fn ensure_sparse_idx(&mut self, entity: entities::Entity) -> usize {
+    fn ensure_sparse_idx(&mut self, entity: ecs::Entity) -> usize {
         let sparse_idx = entity as usize;
 
         if sparse_idx >= self.sparse.len() {
@@ -38,12 +35,12 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    fn dense_idx(&self, entity: entities::Entity) -> Option<usize> {
+    fn dense_idx(&self, entity: ecs::Entity) -> Option<usize> {
         self.sparse.get(entity as usize).and_then(|slot| *slot)
     }
 
     #[inline]
-    fn push_new(&mut self, entity: entities::Entity, component: T) {
+    fn push_new(&mut self, entity: ecs::Entity, component: T) {
         let sparse_idx = self.ensure_sparse_idx(entity);
         let dense_idx = self.components.len();
 
@@ -53,11 +50,11 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn insert(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
+    pub fn insert(&mut self, entity: ecs::Entity, component: T) -> Result<(), base::ComponentError> {
         let sparse_idx = self.ensure_sparse_idx(entity);
 
         if self.sparse[sparse_idx].is_some() {
-            return Err(error::ComponentError::DuplicateComponent(entity));
+            return Err(base::ComponentError::DuplicateComponent(entity));
         }
 
         self.push_new(entity, component);
@@ -65,7 +62,7 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn upsert(&mut self, entity: entities::Entity, component: T) {
+    pub fn upsert(&mut self, entity: ecs::Entity, component: T) {
         match self.sparse.get(entity as usize).and_then(|slot| *slot) {
             Some(dense_idx) => {
                 self.components[dense_idx] = component;
@@ -77,15 +74,15 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn update(&mut self, entity: entities::Entity, component: T) -> Result<(), error::ComponentError> {
-        let dense_idx = self.dense_idx(entity).ok_or(error::ComponentError::ComponentNotFound(entity))?;
+    pub fn update(&mut self, entity: ecs::Entity, component: T) -> Result<(), base::ComponentError> {
+        let dense_idx = self.dense_idx(entity).ok_or(base::ComponentError::ComponentNotFound(entity))?;
 
         self.components[dense_idx] = component;
         Ok(())
     }
 
     #[inline]
-    pub fn remove(&mut self, entity: entities::Entity) -> Option<T> {
+    pub fn remove(&mut self, entity: ecs::Entity) -> Option<T> {
         let sparse_idx = entity as usize;
         let dense_idx = self.sparse.get_mut(sparse_idx)?.take()?;
 
@@ -104,19 +101,19 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn get(&self, entity: entities::Entity) -> Option<&T> {
+    pub fn get(&self, entity: ecs::Entity) -> Option<&T> {
         let dense_idx = self.dense_idx(entity)?;
         self.components.get(dense_idx)
     }
 
     #[inline]
-    pub fn get_mut(&mut self, entity: entities::Entity) -> Option<&mut T> {
+    pub fn get_mut(&mut self, entity: ecs::Entity) -> Option<&mut T> {
         let dense_idx = self.dense_idx(entity)?;
         self.components.get_mut(dense_idx)
     }
 
     #[inline]
-    pub fn get2(&self, entity_1: entities::Entity, entity_2: entities::Entity) -> (Option<&T>, Option<&T>) {
+    pub fn get2(&self, entity_1: ecs::Entity, entity_2: ecs::Entity) -> (Option<&T>, Option<&T>) {
         if entity_1 == entity_2 {
             return (None, None);
         }
@@ -125,7 +122,7 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn get2_mut(&mut self, entity_1: entities::Entity, entity_2: entities::Entity) -> (Option<&mut T>, Option<&mut T>) {
+    pub fn get2_mut(&mut self, entity_1: ecs::Entity, entity_2: ecs::Entity) -> (Option<&mut T>, Option<&mut T>) {
         if entity_1 == entity_2 {
             return (None, None);
         }
@@ -150,17 +147,17 @@ impl<T> SparseSet<T> {
     }
 
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (entities::Entity, &T)> {
+    pub fn iter(&self) -> impl Iterator<Item = (ecs::Entity, &T)> {
         self.entities.iter().copied().zip(self.components.iter())
     }
 
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (entities::Entity, &mut T)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (ecs::Entity, &mut T)> {
         self.entities.iter().copied().zip(self.components.iter_mut())
     }
 
     #[inline]
-    pub fn get_ents(&self) -> &[entities::Entity] {
+    pub fn get_ents(&self) -> &[ecs::Entity] {
         &self.entities
     }
 
@@ -174,11 +171,11 @@ pub trait ErasedStorage: 'static {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    fn get_any(&self, entity: entities::Entity) -> Option<&dyn Any>;
-    fn get_any_mut(&mut self, entity: entities::Entity) -> Option<&mut dyn Any>;
+    fn get_any(&self, entity: ecs::Entity) -> Option<&dyn Any>;
+    fn get_any_mut(&mut self, entity: ecs::Entity) -> Option<&mut dyn Any>;
 }
 
-impl<T: components::UserComponent> ErasedStorage for SparseSet<T> {
+impl<T: ecs::UserComponent> ErasedStorage for SparseSet<T> {
     #[inline]
     fn as_any(&self) -> &dyn Any {
         self
@@ -190,12 +187,12 @@ impl<T: components::UserComponent> ErasedStorage for SparseSet<T> {
     }
 
     #[inline]
-    fn get_any(&self, entity: entities::Entity) -> Option<&dyn Any> {
+    fn get_any(&self, entity: ecs::Entity) -> Option<&dyn Any> {
         self.get(entity).map(|c| c as &dyn Any)
     }
 
     #[inline]
-    fn get_any_mut(&mut self, entity: entities::Entity) -> Option<&mut dyn Any> {
+    fn get_any_mut(&mut self, entity: ecs::Entity) -> Option<&mut dyn Any> {
         self.get_mut(entity).map(|c| c as &mut dyn Any)
     }
 }

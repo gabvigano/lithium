@@ -1,8 +1,4 @@
-use crate::{
-    core::{error, time},
-    ecs::{components, entities, world},
-    network::shared,
-};
+use crate::{base, ecs, network};
 
 use bincode::{Decode, Encode};
 
@@ -11,16 +7,16 @@ pub const MAX_PACKET_SIZE: usize = 1200;
 #[derive(Debug, Encode, Decode)]
 pub enum ServerPacket<S, I> {
     JoinAccept,
-    Ping { send_time: u64, tick: time::Tick },
+    Ping { send_time: u64, tick: base::Tick },
     InitialState(Snapshot),
-    DeltaState { snapshot: Snapshot, ack_tick: time::Tick },
-    InputState(shared::InputMap<I>),
+    DeltaState { snapshot: Snapshot, ack_tick: base::Tick },
+    InputState(network::InputMap<I>),
     User(S),
 }
 
 impl<S: Encode, I: Encode> ServerPacket<S, I> {
     #[inline]
-    pub fn size(&self) -> Result<usize, error::NetworkError> {
+    pub fn size(&self) -> Result<usize, base::NetworkError> {
         let mut buffer = [0u8; MAX_PACKET_SIZE * 2];
 
         Ok(bincode::encode_into_slice(self, &mut buffer, bincode::config::standard())?)
@@ -31,13 +27,13 @@ impl<S: Encode, I: Encode> ServerPacket<S, I> {
 pub enum ClientPacket<C, I> {
     JoinRequest,
     Ping(u64),
-    Input { input: I, tick: time::Tick },
+    Input { input: I, tick: base::Tick },
     User(C),
 }
 
 impl<C: Encode, I: Encode> ClientPacket<C, I> {
     #[inline]
-    pub fn size(&self) -> Result<usize, error::NetworkError> {
+    pub fn size(&self) -> Result<usize, base::NetworkError> {
         let mut buffer = [0u8; MAX_PACKET_SIZE * 2];
 
         Ok(bincode::encode_into_slice(self, &mut buffer, bincode::config::standard())?)
@@ -46,7 +42,7 @@ impl<C: Encode, I: Encode> ClientPacket<C, I> {
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct Snapshot {
-    pub tick: time::Tick,
+    pub tick: base::Tick,
     pub packet_id: u16,
     pub actions: Vec<NetworkAction>,
 }
@@ -58,7 +54,7 @@ pub struct NetworkAction {
 }
 
 impl NetworkAction {
-    pub fn apply<const N: usize>(self, world: &mut world::World<N>) -> Result<(), error::ComponentError> {
+    pub fn apply<const N: usize>(self, world: &mut ecs::World<N>) -> Result<(), base::ComponentError> {
         self.command.apply(world)
     }
 }
@@ -66,17 +62,17 @@ impl NetworkAction {
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum NetworkCommand {
     Set {
-        entity: entities::Entity,
+        entity: ecs::Entity,
         component: DataNetworkComponent,
     },
     Remove {
-        entity: entities::Entity,
+        entity: ecs::Entity,
         component: EmptyNetworkComponent,
     },
 }
 
 impl NetworkCommand {
-    pub fn apply<const N: usize>(self, world: &mut world::World<N>) -> Result<(), error::ComponentError> {
+    pub fn apply<const N: usize>(self, world: &mut ecs::World<N>) -> Result<(), base::ComponentError> {
         match self {
             Self::Set { entity, component } => {
                 component.set(world, entity);
@@ -102,7 +98,7 @@ pub enum EmptyNetworkComponent {
 }
 
 impl EmptyNetworkComponent {
-    fn remove<const N: usize>(&self, world: &mut world::World<N>, entity: entities::Entity) {
+    fn remove<const N: usize>(&self, world: &mut ecs::World<N>, entity: ecs::Entity) {
         match self {
             Self::Transform => _ = world.engine.transform.remove(entity),
             Self::RotationMatrix => _ = world.engine.rotation_matrix.remove(entity),
@@ -117,17 +113,17 @@ impl EmptyNetworkComponent {
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum DataNetworkComponent {
-    Transform(components::Transform),
-    RotationMatrix(components::RotationMatrix),
-    Translation(components::Translation),
-    Rotation(components::Rotation),
-    Surface(components::Surface),
-    Body(components::Body),
-    Material(components::Material),
+    Transform(ecs::Transform),
+    RotationMatrix(ecs::RotationMatrix),
+    Translation(ecs::Translation),
+    Rotation(ecs::Rotation),
+    Surface(ecs::Surface),
+    Body(ecs::Body),
+    Material(ecs::Material),
 }
 
 impl DataNetworkComponent {
-    fn set<const N: usize>(self, world: &mut world::World<N>, entity: entities::Entity) {
+    fn set<const N: usize>(self, world: &mut ecs::World<N>, entity: ecs::Entity) {
         match self {
             Self::Transform(component) => world.engine.transform.upsert(entity, component),
             Self::RotationMatrix(component) => world.engine.rotation_matrix.upsert(entity, component),

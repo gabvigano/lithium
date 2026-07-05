@@ -1,7 +1,5 @@
-use crate::{
-    core::error,
-    math::{self, Centroid},
-};
+use crate::math::Centroid;
+use crate::{base, math};
 
 use std::{any::Any, fmt};
 
@@ -165,9 +163,9 @@ pub struct Translation {
 
 impl Translation {
     #[inline]
-    pub fn new(lin_vel: math::Vec2, force: math::Vec2, mass: f32) -> Result<Self, error::MathError> {
+    pub fn new(lin_vel: math::Vec2, force: math::Vec2, mass: f32) -> Result<Self, base::MathError> {
         if mass <= 0.0 {
-            return Err(error::MathError::NonPositive("mass"));
+            return Err(base::MathError::NonPositive("mass"));
         }
 
         Ok(Self {
@@ -226,39 +224,37 @@ impl Translation {
     }
 
     #[inline]
-    pub fn apply_lin_vel_axis(&mut self, lin_vel: f32, axis: math::Axis, limit: Option<f32>) {
+    pub fn apply_lin_vel_axis(&mut self, lin_vel: f32, axis: math::Axis) {
         match axis {
             math::Axis::X => {
-                self.lin_vel.x = math::clamp_toward_zero(self.lin_vel.x + lin_vel, limit);
+                self.lin_vel.x += lin_vel;
             }
             math::Axis::Y => {
-                self.lin_vel.y = math::clamp_toward_zero(self.lin_vel.y + lin_vel, limit);
+                self.lin_vel.y += lin_vel;
             }
         }
     }
 
     #[inline]
-    pub fn apply_lin_vel(&mut self, lin_vel: math::Vec2, limit: Option<f32>) {
-        self.lin_vel.y = math::clamp_toward_zero(self.lin_vel.y + lin_vel.y, limit);
-        self.lin_vel.x = math::clamp_toward_zero(self.lin_vel.x + lin_vel.x, limit);
+    pub fn apply_lin_vel(&mut self, lin_vel: math::Vec2) {
+        self.lin_vel.add_mut(lin_vel);
     }
 
     #[inline]
-    pub fn apply_force_axis(&mut self, force: f32, axis: math::Axis, limit: Option<f32>) {
+    pub fn apply_force_axis(&mut self, force: f32, axis: math::Axis) {
         match axis {
             math::Axis::X => {
-                self.force.x = math::clamp_toward_zero(self.force.x + force, limit);
+                self.force.x += force;
             }
             math::Axis::Y => {
-                self.force.y = math::clamp_toward_zero(self.force.y + force, limit);
+                self.force.y += force;
             }
         }
     }
 
     #[inline]
-    pub fn apply_force(&mut self, force: math::Vec2, limit: Option<f32>) {
-        self.force.y = math::clamp_toward_zero(self.force.y + force.y, limit);
-        self.force.x = math::clamp_toward_zero(self.force.x + force.x, limit);
+    pub fn apply_force(&mut self, force: math::Vec2) {
+        self.force.add_mut(force);
     }
 }
 
@@ -273,7 +269,7 @@ impl fmt::Display for Translation {
 }
 
 impl TryFrom<TranslationSpec> for Translation {
-    type Error = error::MathError;
+    type Error = base::MathError;
 
     fn try_from(spec: TranslationSpec) -> Result<Self, Self::Error> {
         Self::new(spec.lin_vel, spec.force, spec.mass)
@@ -297,9 +293,9 @@ pub struct Rotation {
 
 impl Rotation {
     #[inline]
-    pub fn new(ang_vel: f32, torque: f32, inertia: f32) -> Result<Self, error::MathError> {
+    pub fn new(ang_vel: f32, torque: f32, inertia: f32) -> Result<Self, base::MathError> {
         if inertia <= 0.0 {
-            return Err(error::MathError::NonPositive("inertia"));
+            return Err(base::MathError::NonPositive("inertia"));
         }
 
         Ok(Self {
@@ -347,13 +343,13 @@ impl Rotation {
     }
 
     #[inline]
-    pub fn apply_ang_vel(&mut self, ang_vel: f32, limit: Option<f32>) {
-        self.ang_vel = math::clamp_toward_zero(self.ang_vel + ang_vel, limit)
+    pub fn apply_ang_vel(&mut self, ang_vel: f32) {
+        self.ang_vel += ang_vel;
     }
 
     #[inline]
-    pub fn apply_torque(&mut self, torque: f32, limit: Option<f32>) {
-        self.torque = math::clamp_toward_zero(self.torque + torque, limit)
+    pub fn apply_torque(&mut self, torque: f32) {
+        self.torque += torque;
     }
 }
 
@@ -368,7 +364,7 @@ impl fmt::Display for Rotation {
 }
 
 impl TryFrom<RotationSpec> for Rotation {
-    type Error = error::MathError;
+    type Error = base::MathError;
 
     fn try_from(spec: RotationSpec) -> Result<Self, Self::Error> {
         Self::new(spec.ang_vel, spec.torque, spec.inertia)

@@ -1,8 +1,4 @@
-use crate::{
-    core::{error, time},
-    ecs::world,
-    network::packets,
-};
+use crate::{base, ecs, network};
 
 use bincode::Encode;
 
@@ -13,15 +9,15 @@ use bincode::Encode;
 //         $action:expr,
 //         $packet_variant:ident
 //     ) => {{
-//         if let Some(packets::ServerPacket::$packet_variant(last_snapshot)) = $packets_to_send.last_mut() {
+//         if let Some(network::ServerPacket::$packet_variant(last_snapshot)) = $packets_to_send.last_mut() {
 //             last_snapshot.actions.push($action);
 
-//             if Self::encoded_size(&packets::ServerPacket::<S>::$packet_variant(last_snapshot.clone()))? <= packets::MAX_PACKET_SIZE {
-//                 Ok::<(), error::NetworkError>(())
+//             if Self::encoded_size(&network::ServerPacket::<S>::$packet_variant(last_snapshot.clone()))? <= network::MAX_PACKET_SIZE {
+//                 Ok::<(), base::NetworkError>(())
 //             } else {
 //                 let last_action = last_snapshot.actions.pop().unwrap();
 
-//                 let new_packet = packets::ServerPacket::$packet_variant(packets::Snapshot {
+//                 let new_packet = network::ServerPacket::$packet_variant(network::Snapshot {
 //                     tick: $tick,
 //                     packet_id: $packets_to_send.len() as u16,
 //                     actions: vec![last_action],
@@ -31,7 +27,7 @@ use bincode::Encode;
 //                 Ok(())
 //             }
 //         } else {
-//             $packets_to_send.push(packets::ServerPacket::$packet_variant(packets::Snapshot {
+//             $packets_to_send.push(network::ServerPacket::$packet_variant(network::Snapshot {
 //                 tick: $tick,
 //                 packet_id: $packets_to_send.len() as u16,
 //                 actions: vec![$action],
@@ -56,11 +52,11 @@ macro_rules! load_initial_state {
             push_actions_initial_state::<$S, $I>(
                 $packets,
                 $tick,
-                packets::NetworkAction {
+                network::NetworkAction {
                     always_apply: false,
-                    command: packets::NetworkCommand::Set {
+                    command: network::NetworkCommand::Set {
                         entity,
-                        component: packets::DataNetworkComponent::$component_variant(component.clone()),
+                        component: network::DataNetworkComponent::$component_variant(component.clone()),
                     },
                 },
             )?;
@@ -85,11 +81,11 @@ macro_rules! load_delta_state {
                 push_actions_delta_state::<$S, $I>(
                     $snapshots,
                     $tick,
-                    packets::NetworkAction {
+                    network::NetworkAction {
                         always_apply: false,
-                        command: packets::NetworkCommand::Set {
+                        command: network::NetworkCommand::Set {
                             entity,
-                            component: packets::DataNetworkComponent::$component_variant(component.clone()),
+                            component: network::DataNetworkComponent::$component_variant(component.clone()),
                         },
                     },
                 )?;
@@ -102,11 +98,11 @@ macro_rules! load_delta_state {
                 push_actions_delta_state::<$S, $I>(
                     $snapshots,
                     $tick,
-                    packets::NetworkAction {
+                    network::NetworkAction {
                         always_apply: false,
-                        command: packets::NetworkCommand::Remove {
+                        command: network::NetworkCommand::Remove {
                             entity,
-                            component: packets::EmptyNetworkComponent::$component_variant,
+                            component: network::EmptyNetworkComponent::$component_variant,
                         },
                     },
                 )?;
@@ -117,20 +113,20 @@ macro_rules! load_delta_state {
 
 // #[inline]
 // fn push_actions(
-//     packets_to_send: &mut Vec<packets::ServerPacket<S>>,
-//     clock: time::Clock,
-//     action: packets::NetworkAction,
-// ) -> Result<(), error::NetworkError> {
-//     if let Some(packets::ServerPacket::Snapshot(last_snapshot)) = packets_to_send.last_mut() {
+//     packets_to_send: &mut Vec<network::ServerPacket<S>>,
+//     clock: base::Clock,
+//     action: network::NetworkAction,
+// ) -> Result<(), base::NetworkError> {
+//     if let Some(network::ServerPacket::Snapshot(last_snapshot)) = packets_to_send.last_mut() {
 //         last_snapshot.actions.push(action);
 
-//         if Self::encoded_size(&packets::ServerPacket::<S>::Snapshot(last_snapshot.clone()))? <= packets::MAX_PACKET_SIZE {
+//         if Self::encoded_size(&network::ServerPacket::<S>::Snapshot(last_snapshot.clone()))? <= network::MAX_PACKET_SIZE {
 //             return Ok(());
 //         }
 
 //         let last_action = last_snapshot.actions.pop().unwrap();
 
-//         let new_packet = packets::ServerPacket::Snapshot(packets::SnapshotPacket {
+//         let new_packet = network::ServerPacket::Snapshot(network::SnapshotPacket {
 //             clock,
 //             packet_id: packets_to_send.len() as u16,
 //             actions: vec![last_action],
@@ -140,7 +136,7 @@ macro_rules! load_delta_state {
 //         return Ok(());
 //     }
 
-//     packets_to_send.push(packets::ServerPacket::Snapshot(packets::SnapshotPacket {
+//     packets_to_send.push(network::ServerPacket::Snapshot(network::SnapshotPacket {
 //         clock,
 //         packet_id: 0,
 //         actions: vec![action],
@@ -151,20 +147,20 @@ macro_rules! load_delta_state {
 
 #[inline]
 pub fn push_actions_initial_state<S: Encode, I: Encode>(
-    packets_to_send: &mut Vec<packets::ServerPacket<S, I>>,
-    tick: time::Tick,
-    action: packets::NetworkAction,
-) -> Result<(), error::NetworkError> {
-    if let Some(packets::ServerPacket::InitialState(last_snapshot)) = packets_to_send.last_mut() {
+    packets_to_send: &mut Vec<network::ServerPacket<S, I>>,
+    tick: base::Tick,
+    action: network::NetworkAction,
+) -> Result<(), base::NetworkError> {
+    if let Some(network::ServerPacket::InitialState(last_snapshot)) = packets_to_send.last_mut() {
         last_snapshot.actions.push(action);
 
-        if packets::ServerPacket::<S, I>::InitialState(last_snapshot.clone()).size()? <= packets::MAX_PACKET_SIZE {
-            return Ok::<(), error::NetworkError>(());
+        if network::ServerPacket::<S, I>::InitialState(last_snapshot.clone()).size()? <= network::MAX_PACKET_SIZE {
+            return Ok::<(), base::NetworkError>(());
         }
 
         let last_action = last_snapshot.actions.pop().unwrap();
 
-        let new_packet = packets::ServerPacket::InitialState(packets::Snapshot {
+        let new_packet = network::ServerPacket::InitialState(network::Snapshot {
             tick: tick,
             packet_id: packets_to_send.len() as u16,
             actions: vec![last_action],
@@ -174,7 +170,7 @@ pub fn push_actions_initial_state<S: Encode, I: Encode>(
         return Ok(());
     }
 
-    packets_to_send.push(packets::ServerPacket::InitialState(packets::Snapshot {
+    packets_to_send.push(network::ServerPacket::InitialState(network::Snapshot {
         tick: tick,
         packet_id: packets_to_send.len() as u16,
         actions: vec![action],
@@ -185,25 +181,25 @@ pub fn push_actions_initial_state<S: Encode, I: Encode>(
 
 #[inline]
 pub fn push_actions_delta_state<S: Encode, I: Encode>(
-    snapshots: &mut Vec<packets::Snapshot>,
-    tick: time::Tick,
-    action: packets::NetworkAction,
-) -> Result<(), error::NetworkError> {
+    snapshots: &mut Vec<network::Snapshot>,
+    tick: base::Tick,
+    action: network::NetworkAction,
+) -> Result<(), base::NetworkError> {
     if let Some(last_snapshot) = snapshots.last_mut() {
         last_snapshot.actions.push(action);
 
-        if (packets::ServerPacket::<S, I>::DeltaState {
+        if (network::ServerPacket::<S, I>::DeltaState {
             snapshot: last_snapshot.clone(),
             ack_tick: 0, // dummy ack_tick to check packet size, since field's size is fixed (u32)
         })
         .size()?
-            <= packets::MAX_PACKET_SIZE
+            <= network::MAX_PACKET_SIZE
         {
-            return Ok::<(), error::NetworkError>(());
+            return Ok::<(), base::NetworkError>(());
         }
         let last_action = last_snapshot.actions.pop().unwrap();
 
-        let new_snapshot = packets::Snapshot {
+        let new_snapshot = network::Snapshot {
             tick: tick,
             packet_id: snapshots.len() as u16,
             actions: vec![last_action],
@@ -213,7 +209,7 @@ pub fn push_actions_delta_state<S: Encode, I: Encode>(
         return Ok(());
     }
 
-    snapshots.push(packets::Snapshot {
+    snapshots.push(network::Snapshot {
         tick: tick,
         packet_id: snapshots.len() as u16,
         actions: vec![action],
@@ -224,10 +220,10 @@ pub fn push_actions_delta_state<S: Encode, I: Encode>(
 
 #[inline]
 pub fn initial_state_packets<const N: usize, S: Encode, I: Encode>(
-    world: &world::World<N>,
-    tick: time::Tick,
-    packets: &mut Vec<packets::ServerPacket<S, I>>,
-) -> Result<(), error::NetworkError> {
+    world: &ecs::World<N>,
+    tick: base::Tick,
+    packets: &mut Vec<network::ServerPacket<S, I>>,
+) -> Result<(), base::NetworkError> {
     load_initial_state!(world, packets, S, I, tick, transform, Transform);
     load_initial_state!(world, packets, S, I, tick, rotation_matrix, RotationMatrix);
     load_initial_state!(world, packets, S, I, tick, translation, Translation);
@@ -241,11 +237,11 @@ pub fn initial_state_packets<const N: usize, S: Encode, I: Encode>(
 
 #[inline]
 pub fn delta_state_snapshots<const N: usize, S: Encode, I: Encode>(
-    world: &world::World<N>,
-    world_cache: &world::World<N>,
-    tick: time::Tick,
-    snapshots: &mut Vec<packets::Snapshot>,
-) -> Result<(), error::NetworkError> {
+    world: &ecs::World<N>,
+    world_cache: &ecs::World<N>,
+    tick: base::Tick,
+    snapshots: &mut Vec<network::Snapshot>,
+) -> Result<(), base::NetworkError> {
     load_delta_state!(world, world_cache, snapshots, S, I, tick, transform, Transform);
     load_delta_state!(world, world_cache, snapshots, S, I, tick, rotation_matrix, RotationMatrix);
     load_delta_state!(world, world_cache, snapshots, S, I, tick, translation, Translation);

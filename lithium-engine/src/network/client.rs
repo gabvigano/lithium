@@ -1,11 +1,5 @@
-use crate::{
-    core::{
-        collections, error,
-        time::{self, TickMethods},
-    },
-    ecs::{entities, world},
-    network::{packets, shared},
-};
+use crate::base::time::TickMethods;
+use crate::{base, ecs, network};
 
 use std::marker::PhantomData;
 use std::net::{SocketAddr, UdpSocket};
@@ -23,10 +17,10 @@ pub struct Client<S, C, I> {
     socket: UdpSocket,
     pub connected: Arc<AtomicBool>,
     ping_epoch: Instant,
-    pings: mpsc::Receiver<(Duration, u64, time::Tick)>,
-    ping_history: collections::CappedVec<(Duration, u64, time::Tick)>,
+    pings: mpsc::Receiver<(Duration, u64, base::Tick)>,
+    ping_history: base::CappedVec<(Duration, u64, base::Tick)>,
     pub delay: Duration,
-    pub received_packets: mpsc::Receiver<packets::ServerPacket<S, I>>,
+    pub received_packets: mpsc::Receiver<network::ServerPacket<S, I>>,
     _marker: PhantomData<C>,
 }
 
@@ -37,8 +31,8 @@ where
     I: bincode::Encode + bincode::Decode<()> + Send + 'static,
 {
     #[inline]
-    pub fn start(port: u16, server_address: SocketAddr) -> Result<Self, error::NetworkError> {
-        let ip = shared::get_local_ip();
+    pub fn start(port: u16, server_address: SocketAddr) -> Result<Self, base::NetworkError> {
+        let ip = network::get_local_ip();
         let address = SocketAddr::new(ip, port);
         let socket = UdpSocket::bind(address)?;
         let address = socket.local_addr()?;
@@ -55,7 +49,7 @@ where
             connected: connected.clone(),
             ping_epoch,
             pings: pings_rx,
-            ping_history: collections::CappedVec::new(20),
+            ping_history: base::CappedVec::new(20),
             delay: Duration::from_millis(50),
             received_packets: received_packets_rx,
             _marker: PhantomData,
@@ -69,24 +63,24 @@ where
     }
 
     #[inline]
-    pub fn connect(&self) -> Result<(), error::NetworkError> {
+    pub fn connect(&self) -> Result<(), base::NetworkError> {
         println!("\n>> connecting to server...");
         self.socket.connect(self.server_address)?;
-        let join_bytes = bincode::encode_to_vec(packets::ClientPacket::<C, I>::JoinRequest, bincode::config::standard())?;
+        let join_bytes = bincode::encode_to_vec(network::ClientPacket::<C, I>::JoinRequest, bincode::config::standard())?;
         self.socket.send(&join_bytes)?;
         Ok(())
     }
 
     #[inline]
-    pub fn send_packet(&self, packet: &packets::ClientPacket<C, I>) -> Result<(), error::NetworkError> {
-        let mut buffer = [0u8; packets::MAX_PACKET_SIZE];
+    pub fn send_packet(&self, packet: &network::ClientPacket<C, I>) -> Result<(), base::NetworkError> {
+        let mut buffer = [0u8; network::MAX_PACKET_SIZE];
         let len = bincode::encode_into_slice(packet, &mut buffer, bincode::config::standard())?;
         self.socket.send(&buffer[..len])?;
         Ok(())
     }
 
     #[inline]
-    pub fn send_bytes(&self, bytes: &Vec<u8>) -> Result<(), error::NetworkError> {
+    pub fn send_bytes(&self, bytes: &Vec<u8>) -> Result<(), base::NetworkError> {
         self.socket.send(bytes)?;
         Ok(())
     }
@@ -97,8 +91,8 @@ where
         socket: UdpSocket,
         connected: Arc<AtomicBool>,
         ping_epoch: Instant,
-        pings: mpsc::Sender<(Duration, u64, time::Tick)>,
-        received_packets: mpsc::Sender<packets::ServerPacket<S, I>>,
+        pings: mpsc::Sender<(Duration, u64, base::Tick)>,
+        received_packets: mpsc::Sender<network::ServerPacket<S, I>>,
     ) {
         let mut buffer = [0u8; 1500];
 
@@ -109,18 +103,18 @@ where
                         continue;
                     }
 
-                    let (packet, _): (packets::ServerPacket<S, I>, usize) =
+                    let (packet, _): (network::ServerPacket<S, I>, usize) =
                         match bincode::decode_from_slice(&buffer[..len], bincode::config::standard()) {
                             Ok(value) => value,
                             Err(_) => continue,
                         };
 
                     match packet {
-                        packets::ServerPacket::JoinAccept => {
+                        network::ServerPacket::JoinAccept => {
                             connected.store(true, Ordering::Relaxed);
                             println!(">> connection established")
                         }
-                        packets::ServerPacket::Ping { send_time, tick } => {
+                        network::ServerPacket::Ping { send_time, tick } => {
                             let recv_time = ping_epoch.elapsed().as_nanos() as u64;
 
                             let elapsed = recv_time.wrapping_sub(send_time);
@@ -138,12 +132,12 @@ where
     }
 
     #[inline]
-    pub fn ping_server(&mut self, tick: time::Tick) -> Result<(), error::NetworkError> {
+    pub fn ping_server(&mut self, tick: base::Tick) -> Result<(), base::NetworkError> {
         // send pings
         if (tick <= 60 && tick % 6 == 0) || tick % 15 == 0 {
             // during first second: every 100 ms
             // the rest of the time: every 250 ms
-            self.send_packet(&packets::ClientPacket::Ping(self.ping_epoch.elapsed().as_nanos() as u64))?;
+            self.send_packet(&network::ClientPacket::Ping(self.ping_epoch.elapsed().as_nanos() as u64))?;
         }
 
         // add old pings to history
@@ -179,7 +173,7 @@ where
     }
 
     #[inline]
-    pub fn sync_tick(&self, tick: &mut time::Tick, tick_time: Duration) -> Option<()> {
+    pub fn sync_tick(&self, tick: &mut base::Tick, tick_time: Duration) -> Option<()> {
         let (_, recv_time, server_tick) = self.ping_history.data().iter().max_by_key(|(_, recv_time, _)| *recv_time)?;
 
         let now = self.ping_epoch.elapsed().as_nanos() as u64;
@@ -199,11 +193,11 @@ where
 }
 
 pub struct ClientSession<I: PartialEq> {
-    pub assigned_entity: entities::Entity,                     // entity assigned by server for this client
-    pub input_map: shared::InputMap<I>,                        // stores all the recorded inputs for each tick
-    pub last_sent_tick: time::Tick,                            // tick of last input sent, to check against ack_tick
-    pub last_received_snapshot: (time::Tick, world::World<0>), // cache of the last snapshot received from server (todo: use const generic N instead of 0)
-    pub last_rewind_snapshot: (time::Tick, world::World<0>), // cache of the last snapshot use for rewind (todo: use const generic N instead of 0)
+    pub assigned_entity: ecs::Entity,                        // entity assigned by server for this client
+    pub input_map: network::InputMap<I>,                     // stores all the recorded inputs for each tick
+    pub last_sent_tick: base::Tick,                          // tick of last input sent, to check against ack_tick
+    pub last_received_snapshot: (base::Tick, ecs::World<0>), // cache of the last snapshot received from server (todo: use const generic N instead of 0)
+    pub last_rewind_snapshot: (base::Tick, ecs::World<0>), // cache of the last snapshot use for rewind (todo: use const generic N instead of 0)
 }
 
 impl<I: PartialEq> ClientSession<I> {
@@ -211,10 +205,10 @@ impl<I: PartialEq> ClientSession<I> {
     pub fn new() -> Self {
         Self {
             assigned_entity: 0,
-            input_map: shared::InputMap::new(),
+            input_map: network::InputMap::new(),
             last_sent_tick: 0,
-            last_received_snapshot: (0, world::World::default()),
-            last_rewind_snapshot: (0, world::World::default()),
+            last_received_snapshot: (0, ecs::World::default()),
+            last_rewind_snapshot: (0, ecs::World::default()),
         }
     }
 
@@ -224,14 +218,14 @@ impl<I: PartialEq> ClientSession<I> {
     }
 
     #[inline]
-    pub fn record_input(&mut self, tick: time::Tick, input: I) {
+    pub fn record_input(&mut self, tick: base::Tick, input: I) {
         self.last_sent_tick = tick;
         self.input_map.record(tick, self.assigned_entity, input);
     }
 
     #[inline]
-    pub fn apply_initial_state(&mut self, world: &mut world::World<0>, snapshot: packets::Snapshot) {
-        let packets::Snapshot {
+    pub fn apply_initial_state(&mut self, world: &mut ecs::World<0>, snapshot: network::Snapshot) {
+        let network::Snapshot {
             tick: packet_tick,
             packet_id: _,
             actions: packet_actions,
@@ -253,17 +247,17 @@ impl<I: PartialEq> ClientSession<I> {
     #[inline]
     pub fn apply_delta_state<A, P>(
         &mut self,
-        world: &mut world::World<0>,
-        tick: time::Tick,
-        snapshot: packets::Snapshot,
-        ack_tick: time::Tick,
+        world: &mut ecs::World<0>,
+        tick: base::Tick,
+        snapshot: network::Snapshot,
+        ack_tick: base::Tick,
         mut apply_input: A,
         mut compute_physics: P,
     ) where
-        P: FnMut(&mut world::World<0>),
-        A: FnMut(&mut world::World<0>, entities::Entity, &I),
+        P: FnMut(&mut ecs::World<0>),
+        A: FnMut(&mut ecs::World<0>, ecs::Entity, &I),
     {
-        let packets::Snapshot {
+        let network::Snapshot {
             tick: packet_tick,
             packet_id: _,
             actions: packet_actions,
@@ -303,7 +297,7 @@ impl<I: PartialEq> ClientSession<I> {
         world.engine = self.last_rewind_snapshot.1.engine().clone();
 
         while rewind_tick.is_before(tick) {
-            shared::simulate_tick(world, rewind_tick, &mut self.input_map, &mut apply_input, &mut compute_physics);
+            network::simulate_tick(world, rewind_tick, &mut self.input_map, &mut apply_input, &mut compute_physics);
             rewind_tick.next();
         }
     }

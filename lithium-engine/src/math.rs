@@ -1,7 +1,7 @@
 pub mod algebra;
 pub mod geometry;
-pub mod renderer;
+pub mod render;
 
 pub use algebra::*;
 pub use geometry::*;
-pub use renderer::*;
+pub use render::*;

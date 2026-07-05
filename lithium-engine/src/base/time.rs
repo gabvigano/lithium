@@ -1,6 +1,5 @@
-use std::hint::spin_loop;
-use std::thread;
 use std::time::{Duration, Instant};
+use std::{hint::spin_loop, thread};
 
 pub fn wait_frame(next_frame: Instant, spin_time: Duration) {
     if let Some(wait) = next_frame

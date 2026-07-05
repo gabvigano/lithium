@@ -1,7 +1,5 @@
-use crate::{
-    core::time::{self, TickMethods},
-    ecs::{entities, world},
-};
+use crate::base::time::TickMethods;
+use crate::{base, ecs};
 
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -35,14 +33,14 @@ pub fn get_local_ip() -> IpAddr {
 
 #[inline]
 pub(crate) fn simulate_tick<I: PartialEq, A, P>(
-    world: &mut world::World<0>,
-    tick: time::Tick,
+    world: &mut ecs::World<0>,
+    tick: base::Tick,
     input_map: &mut InputMap<I>,
     apply_input: &mut A,
     compute_physics: &mut P,
 ) where
-    A: FnMut(&mut world::World<0>, entities::Entity, &I),
-    P: FnMut(&mut world::World<0>),
+    A: FnMut(&mut ecs::World<0>, ecs::Entity, &I),
+    P: FnMut(&mut ecs::World<0>),
 {
     if let Some(inputs) = input_map.get_tick(tick) {
         for (entity, input) in inputs {
@@ -55,7 +53,7 @@ pub(crate) fn simulate_tick<I: PartialEq, A, P>(
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct InputMap<I> {
-    inputs: BTreeMap<time::Tick, Vec<(entities::Entity, I)>>,
+    inputs: BTreeMap<base::Tick, Vec<(ecs::Entity, I)>>,
 }
 
 impl<I: PartialEq> InputMap<I> {
@@ -65,22 +63,22 @@ impl<I: PartialEq> InputMap<I> {
     }
 
     #[inline]
-    pub fn get_tick(&self, tick: time::Tick) -> Option<&Vec<(entities::Entity, I)>> {
+    pub fn get_tick(&self, tick: base::Tick) -> Option<&Vec<(ecs::Entity, I)>> {
         self.inputs.get(&tick)
     }
 
     #[inline]
-    pub fn get_mut_tick(&mut self, tick: time::Tick) -> Option<&mut Vec<(entities::Entity, I)>> {
+    pub fn get_mut_tick(&mut self, tick: base::Tick) -> Option<&mut Vec<(ecs::Entity, I)>> {
         self.inputs.get_mut(&tick)
     }
 
     #[inline]
-    pub fn prune_before_tick(&mut self, tick: time::Tick) {
+    pub fn prune_before_tick(&mut self, tick: base::Tick) {
         self.inputs.retain(|input_tick, _| input_tick.is_after_or_equal(tick));
     }
 
     #[inline]
-    pub fn record(&mut self, tick: time::Tick, entity: entities::Entity, input: I) {
+    pub fn record(&mut self, tick: base::Tick, entity: ecs::Entity, input: I) {
         if let Some(inputs) = self.inputs.get_mut(&tick) {
             let input = (entity, input);
             if !inputs.contains(&input) {
@@ -92,7 +90,7 @@ impl<I: PartialEq> InputMap<I> {
     }
 
     #[inline]
-    pub fn record_many(&mut self, tick: time::Tick, inputs_vec: Vec<(entities::Entity, I)>) {
+    pub fn record_many(&mut self, tick: base::Tick, inputs_vec: Vec<(ecs::Entity, I)>) {
         if let Some(inputs) = self.inputs.get_mut(&tick) {
             for input in inputs_vec {
                 if !inputs.contains(&input) {

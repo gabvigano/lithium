@@ -69,6 +69,7 @@
 # system update
 [x] hot reloading for map.yaml
 [ ] support circles
+[ ] support concave polygons
 
 # network
 [x] implement network support via udp
@@ -81,7 +82,7 @@
 [ ] support hot reloading (it should invalidate all snapshots on the server)
 
 # physics
-[ ] forces applied to a point
+[x] forces applied to a point
 [ ] springs ?
 [ ] solve physical rotation collision bugs
 
@@ -89,7 +90,9 @@
 [ ] support composite shapes
 [ ] be able to set the center of mass
 [ ] better use of derive for engine's types
-[ ] better apis
+[x] better apis
+[ ] in-game ui support
+[ ] destruction system
 
 # rendering
 [ ] switch to winit + wgpu for graphics
