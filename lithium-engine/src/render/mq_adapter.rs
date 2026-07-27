@@ -102,13 +102,13 @@ pub fn render<const N: usize>(world: &ecs::World<N>, camera: &render::Camera) {
                         color,
                     );
                 }
-                math::Shape::Polygon(polygon) => {
+                math::Shape::CvxPoly(cvx_poly) => {
                     if rot_mat_is_none {
-                        let v0 = pos.add(polygon.verts[0]);
-                        let mut vi = pos.add(polygon.verts[1]);
+                        let v0 = pos.add(cvx_poly.verts[0]);
+                        let mut vi = pos.add(cvx_poly.verts[1]);
 
-                        for i in 1..(polygon.verts.len() - 1) {
-                            let vi1 = pos.add(polygon.verts[i + 1]);
+                        for i in 1..(cvx_poly.verts.len() - 1) {
+                            let vi1 = pos.add(cvx_poly.verts[i + 1]);
 
                             mq_prelude::draw_triangle(
                                 mq_math::Vec2::new(v0.x - cam_x, v0.y - cam_y),
@@ -120,11 +120,11 @@ pub fn render<const N: usize>(world: &ecs::World<N>, camera: &render::Camera) {
                             vi = vi1;
                         }
                     } else {
-                        let v0 = pos.add(rot_mat.pre_mul_vec2(polygon.verts[0]));
-                        let mut vi = pos.add(rot_mat.pre_mul_vec2(polygon.verts[1]));
+                        let v0 = pos.add(rot_mat.pre_mul_vec2(cvx_poly.verts[0]));
+                        let mut vi = pos.add(rot_mat.pre_mul_vec2(cvx_poly.verts[1]));
 
-                        for i in 1..(polygon.verts.len() - 1) {
-                            let vi1 = pos.add(rot_mat.pre_mul_vec2(polygon.verts[i + 1]));
+                        for i in 1..(cvx_poly.verts.len() - 1) {
+                            let vi1 = pos.add(rot_mat.pre_mul_vec2(cvx_poly.verts[i + 1]));
 
                             mq_prelude::draw_triangle(
                                 mq_math::Vec2::new(v0.x - cam_x, v0.y - cam_y),
@@ -135,6 +135,92 @@ pub fn render<const N: usize>(world: &ecs::World<N>, camera: &render::Camera) {
 
                             vi = vi1;
                         }
+                    }
+                }
+                math::Shape::CavePoly(cave_poly) => {
+                    let colors = vec![
+                        color_to_mq(math::Color::new(255, 0, 0, 255)),
+                        color_to_mq(math::Color::new(0, 255, 0, 255)),
+                        color_to_mq(math::Color::new(0, 0, 255, 255)),
+                        color_to_mq(math::Color::new(255, 255, 0, 255)),
+                        color_to_mq(math::Color::new(255, 0, 255, 255)),
+                        color_to_mq(math::Color::new(0, 255, 255, 255)),
+                        color_to_mq(math::Color::new(255, 128, 0, 255)),
+                        color_to_mq(math::Color::new(128, 0, 255, 255)),
+                        color_to_mq(math::Color::new(255, 102, 178, 255)),
+                        color_to_mq(math::Color::new(128, 255, 0, 255)),
+                        color_to_mq(math::Color::new(0, 128, 255, 255)),
+                        color_to_mq(math::Color::new(153, 77, 26, 255)),
+                        color_to_mq(math::Color::new(128, 128, 128, 255)),
+                        color_to_mq(math::Color::new(51, 51, 51, 255)),
+                        color_to_mq(math::Color::new(230, 230, 230, 255)),
+                        color_to_mq(math::Color::new(0, 102, 51, 255)),
+                        color_to_mq(math::Color::new(77, 0, 128, 255)),
+                        color_to_mq(math::Color::new(204, 51, 51, 255)),
+                        color_to_mq(math::Color::new(51, 153, 204, 255)),
+                        color_to_mq(math::Color::new(230, 179, 51, 255)),
+                    ];
+
+                    // let cvx_polys = cave_poly.cvx_polys().unwrap();
+
+                    // for (idx, cvx_poly) in cvx_polys.iter().enumerate() {
+                    //     let color = colors[idx];
+
+                    //     if rot_mat_is_none {
+                    //         let v0 = pos.add(cvx_poly.verts[0]);
+                    //         let mut vi = pos.add(cvx_poly.verts[1]);
+
+                    //         for i in 1..(cvx_poly.verts.len() - 1) {
+                    //             let vi1 = pos.add(cvx_poly.verts[i + 1]);
+
+                    //             mq_prelude::draw_triangle(
+                    //                 mq_math::Vec2::new(v0.x - cam_x, v0.y - cam_y),
+                    //                 mq_math::Vec2::new(vi.x - cam_x, vi.y - cam_y),
+                    //                 mq_math::Vec2::new(vi1.x - cam_x, vi1.y - cam_y),
+                    //                 color,
+                    //             );
+
+                    //             vi = vi1;
+                    //         }
+                    //     } else {
+                    //         let v0 = pos.add(rot_mat.pre_mul_vec2(cvx_poly.verts[0]));
+                    //         let mut vi = pos.add(rot_mat.pre_mul_vec2(cvx_poly.verts[1]));
+
+                    //         for i in 1..(cvx_poly.verts.len() - 1) {
+                    //             let vi1 = pos.add(rot_mat.pre_mul_vec2(cvx_poly.verts[i + 1]));
+
+                    //             mq_prelude::draw_triangle(
+                    //                 mq_math::Vec2::new(v0.x - cam_x, v0.y - cam_y),
+                    //                 mq_math::Vec2::new(vi.x - cam_x, vi.y - cam_y),
+                    //                 mq_math::Vec2::new(vi1.x - cam_x, vi1.y - cam_y),
+                    //                 color,
+                    //             );
+
+                    //             vi = vi1;
+                    //         }
+                    //     }
+                    // }
+
+                    let triangles = cave_poly.triangles().unwrap();
+
+                    // hard coded triangle renderer: todo
+                    for (idx, triangle) in triangles.iter().enumerate() {
+                        let (a, b, c) = if rot_mat_is_none {
+                            (pos.add(triangle.a), pos.add(triangle.b), pos.add(triangle.c))
+                        } else {
+                            (
+                                pos.add(rot_mat.pre_mul_vec2(triangle.a)),
+                                pos.add(rot_mat.pre_mul_vec2(triangle.b)),
+                                pos.add(rot_mat.pre_mul_vec2(triangle.c)),
+                            )
+                        };
+
+                        mq_prelude::draw_triangle(
+                            mq_math::Vec2::new(a.x - cam_x, a.y - cam_y),
+                            mq_math::Vec2::new(b.x - cam_x, b.y - cam_y),
+                            mq_math::Vec2::new(c.x - cam_x, c.y - cam_y),
+                            colors[idx],
+                        )
                     }
                 }
                 math::Shape::Circle(_) => {

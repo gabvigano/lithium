@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎮 lithium-engine 🦀
+# lithium-engine
 
 ![build](https://img.shields.io/badge/build-passing-brightgreen)
 ![license](https://img.shields.io/badge/license-non--commercial-blue)
@@ -13,24 +13,24 @@
 
 ---
 
-### ℹ️ About
+### About
 
 This repository contains:
 - **lithium-engine** → library crate, the actual game engine
 - **dropline** → binary crate, an example of a game developed with lithium-engine
 
-**⚠️ Work in progress: APIs and features may change rapidly.**
+**Work in progress: APIs and features may change rapidly.**
 
 ---
 
-### 📦 Requirements
+### Requirements
 
 - [Rust](https://www.rust-lang.org/tools/install) (latest stable recommended)
 - Linux, MacOS, Windows
 
 ---
 
-### 🚀 Installation and execution
+### Installation and execution
 
 Clone the repository, cd into dropline and run it:
 
@@ -42,18 +42,18 @@ cargo run
 
 ---
 
-### 🎥 Demo
+### Demo
 
 ![lithium-engine demo](media/lithium_2.gif)
 
 ---
 
-### 🤝 Contributing
+### Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md). Any help is really appreciated!
 
 ---
 
-### 📜 Licensing
+### Licensing
 
 See [LICENSE.md](./LICENSE.md).

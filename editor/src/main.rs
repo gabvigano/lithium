@@ -149,7 +149,7 @@ async fn main() {
             prelude::integrate_all_lin_vel(&mut world);
             prelude::integrate_all_ang_vel(&mut world);
             prelude::reset_all_rest(&mut world);
-            prelude::resolve_collisions(&mut world, 10);
+            prelude::resolve_collisions(&mut world, 10).unwrap();
             prelude::integrate_all_pos(&mut world);
             prelude::integrate_all_rot_mat(&mut world);
         }

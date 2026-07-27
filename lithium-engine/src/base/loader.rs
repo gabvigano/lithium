@@ -243,10 +243,9 @@ fn match_engine_upsert<const N: usize>(
             let body_spec = ecs::BodySpec::deserialize(data).map_err(base::FileError::from)?;
             let mut body: ecs::Body = body_spec.into();
 
-            // normalize vertices, reject duplicates or non-convex input
-            // this is much more flexible at the cost of losing information about what causes the error
+            // normalize vertices: this is much more flexible at the cost of losing information about what causes the error
             body.shape.normalize()?;
-            body.shape.validate()?;
+            body.shape.validate(true)?;
 
             world.engine.body.upsert(entity, body);
             Ok(())

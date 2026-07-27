@@ -1,6 +1,6 @@
 use crate::{base, math};
 
-use std::{fmt, mem};
+use std::{cell::OnceCell, fmt, mem};
 
 use bincode::{Decode, Encode};
 use serde::Deserialize;
@@ -132,7 +132,7 @@ impl fmt::Display for HitBox {
 }
 
 pub trait Validate {
-    fn validate(&self) -> Result<(), base::GeometryError>;
+    fn validate(&self, warnings: bool) -> Result<(), base::GeometryError>;
     fn normalize(&mut self) -> Result<(), base::GeometryError>;
 }
 
@@ -148,6 +148,7 @@ pub trait SatCompatible {
     fn sides_number(&self) -> usize;
     fn append_sides(&self, sides: &mut Vec<math::Vec2>);
     fn project(&self, axis: math::Vec2) -> (f32, f32);
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError>;
 }
 
 pub trait ApplyTransformationVerts {
@@ -176,10 +177,14 @@ pub trait ApplyTransformationShape {
     where
         Self: Sized;
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self;
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
+    where
+        Self: Sized;
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self;
 }
 
 /// generates a convex hull from a vector of points using monotone chain algorithm
-pub fn convex_hull(mut verts: &mut [math::Vec2]) -> Result<Polygon, base::GeometryError> {
+pub fn convex_hull(mut verts: &mut [math::Vec2]) -> Result<CvxPoly, base::GeometryError> {
     if verts.len() < 3 {
         return Err(base::GeometryError::TooFewVertices(verts.len()));
     }
@@ -232,21 +237,21 @@ pub fn convex_hull(mut verts: &mut [math::Vec2]) -> Result<Polygon, base::Geomet
         return Err(base::GeometryError::TooFewVertices(hull.len()));
     }
 
-    Ok(Polygon::new_unchecked(hull))
+    Ok(CvxPoly::new_unchecked(hull))
 }
 
 #[derive(Debug, Clone)]
 pub enum SweptShape {
     Unchanged(Shape),
-    Changed(Polygon),
+    Changed(CvxPoly),
 }
 
 impl Validate for SweptShape {
     #[inline]
-    fn validate(&self) -> Result<(), base::GeometryError> {
+    fn validate(&self, warnings: bool) -> Result<(), base::GeometryError> {
         match self {
-            SweptShape::Unchanged(shape) => shape.validate(),
-            SweptShape::Changed(swept) => swept.validate(),
+            SweptShape::Unchanged(shape) => shape.validate(warnings),
+            SweptShape::Changed(swept) => swept.validate(warnings),
         }
     }
 
@@ -283,14 +288,8 @@ impl SatCompatible for SweptShape {
     #[inline]
     fn sides_number(&self) -> usize {
         match self {
-            SweptShape::Unchanged(shape) => match shape {
-                Shape::Segment(_) => 2,
-                Shape::Triangle(_) => 3,
-                Shape::Quad(_) => 4,
-                Shape::Polygon(polygon) => polygon.sides_number(),
-                Shape::Circle(_) => unimplemented!(),
-            },
-            SweptShape::Changed(polygon) => polygon.sides_number(),
+            SweptShape::Unchanged(shape) => shape.sides_number(),
+            SweptShape::Changed(cvx_poly) => cvx_poly.sides_number(),
         }
     }
 
@@ -307,6 +306,14 @@ impl SatCompatible for SweptShape {
         match self {
             SweptShape::Unchanged(shape) => shape.project(axis),
             SweptShape::Changed(swept) => swept.project(axis),
+        }
+    }
+
+    #[inline]
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError> {
+        match self {
+            SweptShape::Unchanged(shape) => shape.split_cave(),
+            SweptShape::Changed(_) => Ok(None),
         }
     }
 }
@@ -343,6 +350,22 @@ impl ApplyTransformationShape for SweptShape {
             SweptShape::Changed(swept) => SweptShape::Changed(swept.apply_mat2x3_unchecked(mat)),
         }
     }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Ok(match self {
+            SweptShape::Unchanged(shape) => SweptShape::Unchanged(shape.apply_mat2x3_then_vec2_checked(vec, mat)?),
+            SweptShape::Changed(swept) => SweptShape::Changed(swept.apply_mat2x3_then_vec2_checked(vec, mat)?),
+        })
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self {
+        match self {
+            SweptShape::Unchanged(shape) => SweptShape::Unchanged(shape.apply_mat2x3_then_vec2_unchecked(vec, mat)),
+            SweptShape::Changed(swept) => SweptShape::Changed(swept.apply_mat2x3_then_vec2_unchecked(vec, mat)),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
@@ -350,18 +373,20 @@ pub enum Shape {
     Segment(Segment),
     Triangle(Triangle),
     Quad(Quad),
-    Polygon(Polygon),
+    CvxPoly(CvxPoly),
+    CavePoly(CavePoly),
     Circle(Circle),
 }
 
 impl Validate for Shape {
     #[inline]
-    fn validate(&self) -> Result<(), base::GeometryError> {
+    fn validate(&self, warnings: bool) -> Result<(), base::GeometryError> {
         match self {
-            Shape::Segment(segment) => segment.validate()?,
-            Shape::Triangle(triangle) => triangle.validate()?,
-            Shape::Quad(quad) => quad.validate()?,
-            Shape::Polygon(polygon) => polygon.validate()?,
+            Shape::Segment(segment) => segment.validate(warnings)?,
+            Shape::Triangle(triangle) => triangle.validate(warnings)?,
+            Shape::Quad(quad) => quad.validate(warnings)?,
+            Shape::CvxPoly(cvx_poly) => cvx_poly.validate(warnings)?,
+            Shape::CavePoly(cave_poly) => cave_poly.validate(warnings)?,
             Shape::Circle(_) => unimplemented!(),
         };
 
@@ -374,7 +399,8 @@ impl Validate for Shape {
             Shape::Segment(segment) => segment.normalize()?,
             Shape::Triangle(triangle) => triangle.normalize()?,
             Shape::Quad(quad) => quad.normalize()?,
-            Shape::Polygon(polygon) => polygon.normalize()?,
+            Shape::CvxPoly(cvx_poly) => cvx_poly.normalize()?,
+            Shape::CavePoly(cave_poly) => cave_poly.normalize()?,
             Shape::Circle(_) => unimplemented!(),
         };
 
@@ -389,7 +415,8 @@ impl Centroid for Shape {
             Shape::Segment(segment) => segment.centroid(),
             Shape::Triangle(triangle) => triangle.centroid(),
             Shape::Quad(quad) => quad.centroid(),
-            Shape::Polygon(polygon) => polygon.centroid(),
+            Shape::CvxPoly(cvx_poly) => cvx_poly.centroid(),
+            Shape::CavePoly(cave_poly) => cave_poly.centroid(),
             Shape::Circle(_) => unimplemented!(),
         }
     }
@@ -402,7 +429,8 @@ impl ToHitBox for Shape {
             Shape::Segment(segment) => segment.to_hitbox(),
             Shape::Triangle(triangle) => triangle.to_hitbox(),
             Shape::Quad(quad) => quad.to_hitbox(),
-            Shape::Polygon(polygon) => polygon.to_hitbox(),
+            Shape::CvxPoly(cvx_poly) => cvx_poly.to_hitbox(),
+            Shape::CavePoly(cave_poly) => cave_poly.to_hitbox(),
             Shape::Circle(circle) => circle.to_hitbox(),
         }
     }
@@ -415,7 +443,8 @@ impl SatCompatible for Shape {
             Shape::Segment(_) => 2,
             Shape::Triangle(_) => 3,
             Shape::Quad(_) => 4,
-            Shape::Polygon(polygon) => polygon.sides_number(),
+            Shape::CvxPoly(cvx_poly) => cvx_poly.sides_number(),
+            Shape::CavePoly(_) => unimplemented!(),
             Shape::Circle(_) => unimplemented!(),
         }
     }
@@ -426,7 +455,8 @@ impl SatCompatible for Shape {
             Shape::Segment(segment) => segment.append_sides(sides),
             Shape::Triangle(triangle) => triangle.append_sides(sides),
             Shape::Quad(quad) => quad.append_sides(sides),
-            Shape::Polygon(polygon) => polygon.append_sides(sides),
+            Shape::CvxPoly(cvx_poly) => cvx_poly.append_sides(sides),
+            Shape::CavePoly(_) => unimplemented!(),
             Shape::Circle(_) => unimplemented!(),
         }
     }
@@ -437,7 +467,20 @@ impl SatCompatible for Shape {
             Shape::Segment(segment) => segment.project(axis),
             Shape::Triangle(triangle) => triangle.project(axis),
             Shape::Quad(quad) => quad.project(axis),
-            Shape::Polygon(polygon) => polygon.project(axis),
+            Shape::CvxPoly(cvx_poly) => cvx_poly.project(axis),
+            Shape::CavePoly(_) => unimplemented!(),
+            Shape::Circle(_) => unimplemented!(),
+        }
+    }
+
+    #[inline]
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError> {
+        match self {
+            Shape::Segment(_) => Ok(None),
+            Shape::Triangle(_) => Ok(None),
+            Shape::Quad(_) => Ok(None),
+            Shape::CvxPoly(_) => Ok(None),
+            Shape::CavePoly(cave_poly) => cave_poly.split_cave(),
             Shape::Circle(_) => unimplemented!(),
         }
     }
@@ -450,7 +493,8 @@ impl ApplyTransformationShape for Shape {
             Shape::Segment(segment) => Shape::Segment(segment.apply_vec2_checked(vec)?),
             Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_vec2_checked(vec)?),
             Shape::Quad(quad) => Shape::Quad(quad.apply_vec2_checked(vec)?),
-            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_vec2_checked(vec)?),
+            Shape::CvxPoly(cvx_poly) => Shape::CvxPoly(cvx_poly.apply_vec2_checked(vec)?),
+            Shape::CavePoly(cave_poly) => Shape::CavePoly(cave_poly.apply_vec2_checked(vec)?),
             Shape::Circle(_) => unimplemented!(),
         })
     }
@@ -461,7 +505,8 @@ impl ApplyTransformationShape for Shape {
             Shape::Segment(segment) => Shape::Segment(segment.apply_vec2_unchecked(vec)),
             Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_vec2_unchecked(vec)),
             Shape::Quad(quad) => Shape::Quad(quad.apply_vec2_unchecked(vec)),
-            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_vec2_unchecked(vec)),
+            Shape::CvxPoly(cvx_poly) => Shape::CvxPoly(cvx_poly.apply_vec2_unchecked(vec)),
+            Shape::CavePoly(cave_poly) => Shape::CavePoly(cave_poly.apply_vec2_unchecked(vec)),
             Shape::Circle(_) => unimplemented!(),
         }
     }
@@ -472,7 +517,8 @@ impl ApplyTransformationShape for Shape {
             Shape::Segment(segment) => Shape::Segment(segment.apply_mat2x3_checked(mat)?),
             Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_mat2x3_checked(mat)?),
             Shape::Quad(quad) => Shape::Quad(quad.apply_mat2x3_checked(mat)?),
-            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_mat2x3_checked(mat)?),
+            Shape::CvxPoly(cvx_poly) => Shape::CvxPoly(cvx_poly.apply_mat2x3_checked(mat)?),
+            Shape::CavePoly(cave_poly) => Shape::CavePoly(cave_poly.apply_mat2x3_checked(mat)?),
             Shape::Circle(_) => unimplemented!(),
         })
     }
@@ -483,7 +529,32 @@ impl ApplyTransformationShape for Shape {
             Shape::Segment(segment) => Shape::Segment(segment.apply_mat2x3_unchecked(mat)),
             Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_mat2x3_unchecked(mat)),
             Shape::Quad(quad) => Shape::Quad(quad.apply_mat2x3_unchecked(mat)),
-            Shape::Polygon(polygon) => Shape::Polygon(polygon.apply_mat2x3_unchecked(mat)),
+            Shape::CvxPoly(cvx_poly) => Shape::CvxPoly(cvx_poly.apply_mat2x3_unchecked(mat)),
+            Shape::CavePoly(cave_poly) => Shape::CavePoly(cave_poly.apply_mat2x3_unchecked(mat)),
+            Shape::Circle(_) => unimplemented!(),
+        }
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Ok(match self {
+            Shape::Segment(segment) => Shape::Segment(segment.apply_mat2x3_then_vec2_checked(vec, mat)?),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_mat2x3_then_vec2_checked(vec, mat)?),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_mat2x3_then_vec2_checked(vec, mat)?),
+            Shape::CvxPoly(cvx_poly) => Shape::CvxPoly(cvx_poly.apply_mat2x3_then_vec2_checked(vec, mat)?),
+            Shape::CavePoly(cave_poly) => Shape::CavePoly(cave_poly.apply_mat2x3_then_vec2_checked(vec, mat)?),
+            Shape::Circle(_) => unimplemented!(),
+        })
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self {
+        match self {
+            Shape::Segment(segment) => Shape::Segment(segment.apply_mat2x3_then_vec2_unchecked(vec, mat)),
+            Shape::Triangle(triangle) => Shape::Triangle(triangle.apply_mat2x3_then_vec2_unchecked(vec, mat)),
+            Shape::Quad(quad) => Shape::Quad(quad.apply_mat2x3_then_vec2_unchecked(vec, mat)),
+            Shape::CvxPoly(cvx_poly) => Shape::CvxPoly(cvx_poly.apply_mat2x3_then_vec2_unchecked(vec, mat)),
+            Shape::CavePoly(cave_poly) => Shape::CavePoly(cave_poly.apply_mat2x3_then_vec2_unchecked(vec, mat)),
             Shape::Circle(_) => unimplemented!(),
         }
     }
@@ -495,7 +566,8 @@ impl fmt::Display for Shape {
             Shape::Segment(segment) => write!(f, "{}", segment),
             Shape::Triangle(triangle) => write!(f, "{}", triangle),
             Shape::Quad(quad) => write!(f, "{}", quad),
-            Shape::Polygon(polygon) => write!(f, "{}", polygon),
+            Shape::CvxPoly(cvx_poly) => write!(f, "{}", cvx_poly),
+            Shape::CavePoly(cave_poly) => write!(f, "{}", cave_poly),
             Shape::Circle(circle) => write!(f, "{}", circle),
         }
     }
@@ -513,7 +585,7 @@ impl Segment {
     pub fn new(a: math::Vec2, b: math::Vec2) -> Result<Self, base::GeometryError> {
         let segment = Self { a, b };
 
-        segment.validate()?;
+        segment.validate(true)?;
 
         Ok(segment)
     }
@@ -534,13 +606,13 @@ impl Segment {
     }
 
     #[inline]
-    pub fn set_a(&mut self, new_a: math::Vec2) {
-        self.a = new_a;
+    pub fn a_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.a
     }
 
     #[inline]
-    pub fn set_b(&mut self, new_b: math::Vec2) {
-        self.b = new_b;
+    pub fn b_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.b
     }
 
     #[inline]
@@ -558,7 +630,7 @@ impl Segment {
         let delta_x = self.b.x - self.a.x;
         let delta_y = self.b.y - self.a.y;
 
-        if delta_x.abs() <= math::EPS {
+        if delta_x.abs() < math::EPS {
             // vertical line
             return None;
         };
@@ -579,12 +651,12 @@ impl Segment {
         let delta_x = self.b.x - self.a.x;
         let delta_y = self.b.y - self.a.y;
 
-        if delta_x.abs() <= math::EPS {
+        if delta_x.abs() < math::EPS {
             // vertical line
             return Some(self.a.x);
         };
 
-        if delta_y.abs() <= math::EPS {
+        if delta_y.abs() < math::EPS {
             // horizontal line
             return None;
         };
@@ -598,7 +670,7 @@ impl Segment {
 
 impl Validate for Segment {
     #[inline]
-    fn validate(&self) -> Result<(), base::GeometryError> {
+    fn validate(&self, _warnings: bool) -> Result<(), base::GeometryError> {
         // check duplicates vertices
         if self.a.square_dist(self.b) < math::EPS_SQR {
             return Err(base::GeometryError::DuplicateVertices);
@@ -636,7 +708,7 @@ impl SatCompatible for Segment {
     #[inline]
     fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
         let segment_side = self.b.sub(self.a);
-        if segment_side.square_mag() > math::EPS_SQR {
+        if segment_side.square_mag() >= math::EPS_SQR {
             sides.push(segment_side)
         }
     }
@@ -645,6 +717,11 @@ impl SatCompatible for Segment {
     fn project(&self, axis: math::Vec2) -> (f32, f32) {
         let (a_proj, b_proj) = (self.a.dot(axis), self.b.dot(axis));
         (a_proj.min(b_proj), a_proj.max(b_proj))
+    }
+
+    #[inline]
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError> {
+        Ok(None)
     }
 }
 
@@ -701,10 +778,7 @@ impl ApplyTransformationVerts for Segment {
 
 impl ApplyTransformationShape for Segment {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
         Self::new(self.a.add(vec), self.b.add(vec))
     }
 
@@ -714,16 +788,23 @@ impl ApplyTransformationShape for Segment {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
         Self::new(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
     }
 
     #[inline]
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
         Self::new_unchecked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Self::new(mat.pre_mul_vec2(self.a).add(vec), mat.pre_mul_vec2(self.b).add(vec))
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(mat.pre_mul_vec2(self.a).add(vec), mat.pre_mul_vec2(self.b).add(vec))
     }
 }
 
@@ -746,7 +827,7 @@ impl Triangle {
     pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Result<Self, base::GeometryError> {
         let triangle = Self { a, b, c };
 
-        triangle.validate()?;
+        triangle.validate(true)?;
 
         Ok(triangle)
     }
@@ -786,24 +867,29 @@ impl Triangle {
     }
 
     #[inline]
-    pub fn set_a(&mut self, new_a: math::Vec2) {
-        self.a = new_a;
+    pub fn a_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.a
     }
 
     #[inline]
-    pub fn set_b(&mut self, new_b: math::Vec2) {
-        self.b = new_b;
+    pub fn b_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.b
     }
 
     #[inline]
-    pub fn set_c(&mut self, new_c: math::Vec2) {
-        self.c = new_c;
+    pub fn c_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.c
+    }
+
+    #[inline]
+    pub fn contains_vec2(&self, vec2: math::Vec2) -> bool {
+        vec2.is_inside_3_vec2(self.a, self.b, self.c)
     }
 }
 
 impl Validate for Triangle {
     #[inline]
-    fn validate(&self) -> Result<(), base::GeometryError> {
+    fn validate(&self, _warnings: bool) -> Result<(), base::GeometryError> {
         // check duplicates vertices
         if self.a.square_dist(self.b) < math::EPS_SQR
             || self.a.square_dist(self.c) < math::EPS_SQR
@@ -854,7 +940,7 @@ impl SatCompatible for Triangle {
     fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
         let triangle_sides = [self.b.sub(self.a), self.c.sub(self.b), self.a.sub(self.c)];
         for triangle_side in triangle_sides {
-            if triangle_side.square_mag() > math::EPS_SQR {
+            if triangle_side.square_mag() >= math::EPS_SQR {
                 sides.push(triangle_side);
             }
         }
@@ -864,6 +950,11 @@ impl SatCompatible for Triangle {
     fn project(&self, axis: math::Vec2) -> (f32, f32) {
         let (a_proj, b_proj, c_proj) = (self.a.dot(axis), self.b.dot(axis), self.c.dot(axis));
         (a_proj.min(b_proj).min(c_proj), a_proj.max(b_proj).max(c_proj))
+    }
+
+    #[inline]
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError> {
+        Ok(None)
     }
 }
 
@@ -935,10 +1026,7 @@ impl ApplyTransformationVerts for Triangle {
 
 impl ApplyTransformationShape for Triangle {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
         Self::new(self.a.add(vec), self.b.add(vec), self.c.add(vec))
     }
 
@@ -948,16 +1036,31 @@ impl ApplyTransformationShape for Triangle {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
         Self::new(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c))
     }
 
     #[inline]
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
         Self::new_unchecked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c))
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Self::new(
+            mat.pre_mul_vec2(self.a).add(vec),
+            mat.pre_mul_vec2(self.b).add(vec),
+            mat.pre_mul_vec2(self.c).add(vec),
+        )
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(
+            mat.pre_mul_vec2(self.a).add(vec),
+            mat.pre_mul_vec2(self.b).add(vec),
+            mat.pre_mul_vec2(self.c).add(vec),
+        )
     }
 }
 
@@ -1044,7 +1147,7 @@ impl Quad {
     pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Result<Self, base::GeometryError> {
         let quad = Self { a, b, c, d };
 
-        quad.validate()?;
+        quad.validate(true)?;
 
         Ok(quad)
     }
@@ -1087,29 +1190,29 @@ impl Quad {
     }
 
     #[inline]
-    pub fn set_a(&mut self, new_a: math::Vec2) {
-        self.a = new_a;
+    pub fn a_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.a
     }
 
     #[inline]
-    pub fn set_b(&mut self, new_b: math::Vec2) {
-        self.b = new_b;
+    pub fn b_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.b
     }
 
     #[inline]
-    pub fn set_c(&mut self, new_c: math::Vec2) {
-        self.c = new_c;
+    pub fn c_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.c
     }
 
     #[inline]
-    pub fn set_d(&mut self, new_d: math::Vec2) {
-        self.d = new_d;
+    pub fn d_mut(&mut self) -> &mut math::Vec2 {
+        &mut self.d
     }
 }
 
 impl Validate for Quad {
     #[inline]
-    fn validate(&self) -> Result<(), base::GeometryError> {
+    fn validate(&self, _warnings: bool) -> Result<(), base::GeometryError> {
         // check duplicates vertices
         if self.a.square_dist(self.b) < math::EPS_SQR
             || self.a.square_dist(self.c) < math::EPS_SQR
@@ -1167,7 +1270,7 @@ impl SatCompatible for Quad {
     fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
         let quad_sides = [self.b.sub(self.a), self.c.sub(self.b), self.d.sub(self.c), self.a.sub(self.d)];
         for quad_side in quad_sides {
-            if quad_side.square_mag() > math::EPS_SQR {
+            if quad_side.square_mag() >= math::EPS_SQR {
                 sides.push(quad_side);
             }
         }
@@ -1180,6 +1283,11 @@ impl SatCompatible for Quad {
             a_proj.min(b_proj).min(c_proj).min(d_proj),
             a_proj.max(b_proj).max(c_proj).max(d_proj),
         )
+    }
+
+    #[inline]
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError> {
+        Ok(None)
     }
 }
 
@@ -1263,10 +1371,7 @@ impl ApplyTransformationVerts for Quad {
 
 impl ApplyTransformationShape for Quad {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
         Self::new(self.a.add(vec), self.b.add(vec), self.c.add(vec), self.d.add(vec))
     }
 
@@ -1276,10 +1381,7 @@ impl ApplyTransformationShape for Quad {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
         Self::new(
             mat.pre_mul_vec2(self.a),
             mat.pre_mul_vec2(self.b),
@@ -1297,6 +1399,26 @@ impl ApplyTransformationShape for Quad {
             mat.pre_mul_vec2(self.d),
         )
     }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Self::new(
+            mat.pre_mul_vec2(self.a).add(vec),
+            mat.pre_mul_vec2(self.b).add(vec),
+            mat.pre_mul_vec2(self.c).add(vec),
+            mat.pre_mul_vec2(self.d).add(vec),
+        )
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(
+            mat.pre_mul_vec2(self.a).add(vec),
+            mat.pre_mul_vec2(self.b).add(vec),
+            mat.pre_mul_vec2(self.c).add(vec),
+            mat.pre_mul_vec2(self.d).add(vec),
+        )
+    }
 }
 
 impl fmt::Display for Quad {
@@ -1305,21 +1427,21 @@ impl fmt::Display for Quad {
     }
 }
 
-/// polygons must be convex, vertices must be stored counterclockwise, and there must be no collinear edges
+/// cvx_poly must be convex, vertices must be stored counterclockwise, and there must be no collinear or duplicate vertices
 /// notice that vertices are local positions, you may need to manually integrate them with a position
 #[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
-pub struct Polygon {
+pub struct CvxPoly {
     pub(crate) verts: Vec<math::Vec2>,
 }
 
-impl Polygon {
+impl CvxPoly {
     #[inline]
-    pub fn new(verts: Vec<math::Vec2>) -> Result<Self, base::GeometryError> {
-        let polygon = Self { verts };
+    pub fn new(verts: Vec<math::Vec2>, warnings: bool) -> Result<Self, base::GeometryError> {
+        let cvx_poly = Self { verts };
 
-        polygon.validate()?;
+        cvx_poly.validate(warnings)?;
 
-        Ok(polygon)
+        Ok(cvx_poly)
     }
 
     #[inline]
@@ -1328,12 +1450,12 @@ impl Polygon {
     }
 
     #[inline]
-    pub fn from_hull(verts: &mut [math::Vec2]) -> Result<Polygon, base::GeometryError> {
+    pub fn from_hull(verts: &mut [math::Vec2]) -> Result<CvxPoly, base::GeometryError> {
         convex_hull(verts)
     }
 
     #[inline]
-    pub fn verts(&self) -> &Vec<math::Vec2> {
+    pub fn verts(&self) -> &[math::Vec2] {
         &self.verts
     }
 
@@ -1341,26 +1463,24 @@ impl Polygon {
     pub fn verts_mut(&mut self) -> &mut Vec<math::Vec2> {
         &mut self.verts
     }
-
-    #[inline]
-    pub fn set_verts(&mut self, new_verts: Vec<math::Vec2>) {
-        self.verts = new_verts;
-    }
 }
 
-impl Validate for Polygon {
-    fn validate(&self) -> Result<(), base::GeometryError> {
+impl Validate for CvxPoly {
+    #[inline]
+    fn validate(&self, warnings: bool) -> Result<(), base::GeometryError> {
         let verts_len = self.verts.len();
 
         if verts_len < 3 {
             return Err(base::GeometryError::TooFewVertices(verts_len));
-        } else if verts_len == 3 {
-            eprintln!("warning: polygon with 3 vertices, consider Shape::Triangle for efficiency");
-        } else if verts_len == 4 {
-            eprintln!("warning: polygon with 4 vertices, consider Shape::Quad for efficiency");
+        } else if warnings {
+            if verts_len == 3 {
+                eprintln!("warning: Shape::CvxPoly with 3 vertices, consider Shape::Triangle for efficiency");
+            } else if verts_len == 4 {
+                eprintln!("warning: Shape::CvxPoly with 4 vertices, consider Shape::Quad for efficiency");
+            }
         }
 
-        // check duplicates vertices
+        // check no duplicate vertices
         for i in 0..verts_len {
             for j in (i + 1)..verts_len {
                 if self.verts[i].square_dist(self.verts[j]) < math::EPS_SQR {
@@ -1369,9 +1489,9 @@ impl Validate for Polygon {
             }
         }
 
-        // check if the polygon is convex
+        // check convexity, no collinear vertices, counterclockwise order
         for i in 0..verts_len {
-            let i1 = (i + 1) % verts_len; // use modulo indexing to restart when the end is reached
+            let i1 = (i + 1) % verts_len;
             let i2 = (i + 2) % verts_len;
 
             let area = self.verts[i].signed_area(self.verts[i1], self.verts[i2]);
@@ -1400,10 +1520,10 @@ impl Validate for Polygon {
     }
 }
 
-impl Centroid for Polygon {
+impl Centroid for CvxPoly {
     #[inline]
     fn centroid(&self) -> math::Vec2 {
-        let mut sum = math::Vec2::new(0.0, 0.0);
+        let mut sum = math::ZERO_VEC2;
         for vert in &self.verts {
             sum.add_mut(*vert);
         }
@@ -1411,14 +1531,14 @@ impl Centroid for Polygon {
     }
 }
 
-impl ToHitBox for Polygon {
+impl ToHitBox for CvxPoly {
     #[inline]
     fn to_hitbox(&self) -> HitBox {
         HitBox::from_verts_slice(&self.verts)
     }
 }
 
-impl SatCompatible for Polygon {
+impl SatCompatible for CvxPoly {
     #[inline]
     fn sides_number(&self) -> usize {
         self.verts().len()
@@ -1430,7 +1550,7 @@ impl SatCompatible for Polygon {
         let mut prev = *verts.last().unwrap();
         for &curr in verts {
             let side = curr.sub(prev);
-            if side.square_mag() > math::EPS_SQR {
+            if side.square_mag() >= math::EPS_SQR {
                 sides.push(side);
             }
             prev = curr;
@@ -1453,9 +1573,14 @@ impl SatCompatible for Polygon {
         }
         (min, max)
     }
+
+    #[inline]
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError> {
+        Ok(None)
+    }
 }
 
-impl ApplyTransformationVerts for Polygon {
+impl ApplyTransformationVerts for CvxPoly {
     type Output = Vec<math::Vec2>;
     type OutputStep = Vec<math::Vec2>;
 
@@ -1535,13 +1660,10 @@ impl ApplyTransformationVerts for Polygon {
     }
 }
 
-impl ApplyTransformationShape for Polygon {
+impl ApplyTransformationShape for CvxPoly {
     #[inline]
-    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
-        Self::new(self.verts().into_iter().map(|v| vec.add(*v)).collect())
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
+        Self::new(self.verts().into_iter().map(|v| vec.add(*v)).collect(), true)
     }
 
     #[inline]
@@ -1550,22 +1672,741 @@ impl ApplyTransformationShape for Polygon {
     }
 
     #[inline]
-    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError>
-    where
-        Self: Sized,
-    {
-        Self::new(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect())
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Self::new(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect(), true)
     }
 
     #[inline]
     fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
         Self::new_unchecked(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect())
     }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        Self::new(self.verts.iter().map(|v| mat.pre_mul_vec2(*v).add(vec)).collect(), true)
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self {
+        Self::new_unchecked(self.verts.iter().map(|v| mat.pre_mul_vec2(*v).add(vec)).collect())
+    }
 }
 
-impl fmt::Display for Polygon {
+impl fmt::Display for CvxPoly {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "polygon (")?;
+        write!(f, "convex polygon (")?;
+        for (i, vert) in self.verts.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", vert)?;
+        }
+        write!(f, ")")
+    }
+}
+
+#[derive(Debug, Default)]
+struct CaveCache {
+    triangles: OnceCell<Vec<Triangle>>,
+    cvx_polys: OnceCell<Vec<CvxPoly>>,
+}
+
+impl CaveCache {
+    #[inline]
+    fn new() -> Self {
+        Self {
+            triangles: OnceCell::new(),
+            cvx_polys: OnceCell::new(),
+        }
+    }
+
+    #[inline]
+    fn clear(&mut self) {
+        *self = Self::new()
+    }
+
+    #[inline]
+    fn triangles(&self) -> Option<&[Triangle]> {
+        self.triangles.get().map(Vec::as_slice)
+    }
+
+    #[inline]
+    fn cvx_polys(&self) -> Option<&[CvxPoly]> {
+        self.cvx_polys.get().map(Vec::as_slice)
+    }
+
+    #[inline]
+    fn apply_transformation<T, U>(&self, triangles_transformation: T, cvx_polys_transformation: U) -> Self
+    where
+        T: FnMut(&Triangle) -> Triangle,
+        U: FnMut(&CvxPoly) -> CvxPoly,
+    {
+        let new_triangles = match self.triangles.get() {
+            Some(triangles) => OnceCell::from(triangles.iter().map(triangles_transformation).collect::<Vec<_>>()),
+            None => OnceCell::new(),
+        };
+
+        let new_cvx_polys = match self.cvx_polys.get() {
+            Some(cvx_polys) => OnceCell::from(cvx_polys.iter().map(cvx_polys_transformation).collect::<Vec<_>>()),
+            None => OnceCell::new(),
+        };
+
+        Self {
+            triangles: new_triangles,
+            cvx_polys: new_cvx_polys,
+        }
+    }
+}
+
+impl Clone for CaveCache {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}
+
+impl PartialEq for CaveCache {
+    #[inline]
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Encode for CaveCache {
+    #[inline]
+    fn encode<E: bincode::enc::Encoder>(&self, _encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
+        Ok(())
+    }
+}
+
+impl<Context> Decode<Context> for CaveCache {
+    #[inline]
+    fn decode<D: bincode::de::Decoder<Context = Context>>(_decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self::new())
+    }
+}
+
+bincode::impl_borrow_decode!(CaveCache);
+
+/// cave_poly must not self intersect, vertices must be stored counterclockwise, and there must be no collinear or duplicate vertices
+/// notice that vertices are local positions, you may need to manually integrate them with a position
+#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+pub struct CavePoly {
+    pub(crate) verts: Vec<math::Vec2>,
+    #[serde(skip)]
+    cache: CaveCache,
+}
+
+impl CavePoly {
+    #[inline]
+    pub fn new(verts: Vec<math::Vec2>, warnings: bool) -> Result<Self, base::GeometryError> {
+        let cave_poly = Self {
+            verts,
+            cache: CaveCache::new(),
+        };
+
+        cave_poly.validate(warnings)?;
+
+        Ok(cave_poly)
+    }
+
+    #[inline]
+    pub fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
+        Self {
+            verts,
+            cache: CaveCache::new(),
+        }
+    }
+
+    #[inline]
+    pub fn verts(&self) -> &[math::Vec2] {
+        &self.verts
+    }
+
+    #[inline]
+    pub fn set_verts(&mut self, new_verts: Vec<math::Vec2>, warnings: bool) -> Result<(), base::GeometryError> {
+        let new_poly = Self::new(new_verts, warnings)?;
+
+        self.verts = new_poly.verts;
+        self.cache = CaveCache::new();
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn set_verts_unchecked(&mut self, new_verts: Vec<math::Vec2>) {
+        self.verts = new_verts;
+        self.cache = CaveCache::new();
+    }
+
+    #[inline]
+    pub fn clear_cache(&mut self) {
+        self.cache.clear();
+    }
+
+    #[inline]
+    pub fn recompute_cache(&mut self) -> Result<(), base::GeometryError> {
+        self.cache.clear();
+        self.populate_cache()
+    }
+
+    #[inline]
+    pub fn populate_cache(&self) -> Result<(), base::GeometryError> {
+        self.triangles()?;
+        self.cvx_polys()?;
+        Ok(())
+    }
+
+    #[inline]
+    pub fn triangles(&self) -> Result<&[Triangle], base::GeometryError> {
+        if let Some(triangles) = self.cache.triangles() {
+            return Ok(triangles);
+        }
+
+        let triangles = self.triangulate()?;
+
+        let _ = self.cache.triangles.set(triangles);
+
+        Ok(self.cache.triangles().unwrap())
+    }
+
+    #[inline]
+    pub fn cvx_polys(&self) -> Result<&[CvxPoly], base::GeometryError> {
+        if let Some(cvx_polys) = self.cache.cvx_polys() {
+            return Ok(cvx_polys);
+        }
+
+        let cvx_polys = self.convex_decomp()?;
+
+        let _ = self.cache.cvx_polys.set(cvx_polys);
+
+        Ok(self.cache.cvx_polys().unwrap())
+    }
+
+    fn triangulate(&self) -> Result<Vec<Triangle>, base::GeometryError> {
+        // ear clipping algorithm
+        if self.verts.len() < 3 {
+            return Err(base::GeometryError::TooFewVertices(self.verts.len()));
+        }
+
+        let mut triangles: Vec<math::Triangle> = Vec::with_capacity(self.verts.len() - 2);
+        let mut verts = self.verts.clone();
+
+        while verts.len() > 3 {
+            let verts_len = verts.len();
+            let mut ear_found = false;
+
+            'loop_1: for i in 0..verts_len {
+                let i1 = (i + 1) % verts_len;
+                let i2 = (i + 2) % verts_len;
+
+                let v0 = verts[i];
+                let v1 = verts[i1];
+                let v2 = verts[i2];
+
+                // check if the triangle will be valid
+                let Ok(triangle) = math::Triangle::new(v0, v1, v2) else {
+                    // triangle is not valid
+                    continue 'loop_1;
+                };
+
+                'loop_2: for j in 0..verts_len {
+                    if j == i || j == i1 || j == i2 {
+                        continue 'loop_2;
+                    }
+
+                    if verts[j].is_inside_3_ccw_vec2(v0, v1, v2) {
+                        // triangle is not an ear because it contains other vertices
+                        continue 'loop_1;
+                    }
+                }
+
+                // triangle is an ear
+                triangles.push(triangle);
+                verts.remove(i1);
+                ear_found = true;
+                break;
+            }
+
+            if !ear_found {
+                return Err(base::GeometryError::InvalidShape);
+            }
+        }
+
+        // push last triangle
+        if verts.len() < 3 {
+            return Err(base::GeometryError::TooFewVertices(verts.len()));
+        }
+
+        triangles.push(math::Triangle::new(verts[0], verts[1], verts[2])?);
+
+        Ok(triangles)
+    }
+
+    fn convex_decomp(&self) -> Result<Vec<CvxPoly>, base::GeometryError> {
+        enum Fragment {
+            Triangle([math::Vec2; 3]),
+            CvxPoly(CvxPoly),
+        }
+
+        impl Fragment {
+            #[inline]
+            fn verts(&self) -> &[math::Vec2] {
+                match self {
+                    Fragment::Triangle(verts) => verts,
+                    Fragment::CvxPoly(cvx_poly) => cvx_poly.verts(),
+                }
+            }
+        }
+
+        let triangles = self.triangles()?;
+        let mut frags: Vec<Fragment> = triangles
+            .into_iter()
+            .map(|Triangle { a, b, c }| Fragment::Triangle([*a, *b, *c]))
+            .collect();
+
+        loop {
+            let frags_len = frags.len();
+            let mut merged_any = false;
+
+            'loop_1: for frag_idx_1 in 0..frags_len {
+                let verts_1 = frags[frag_idx_1].verts();
+                let verts_1_len = verts_1.len();
+
+                'loop_2: for frag_idx_2 in (frag_idx_1 + 1)..frags_len {
+                    let verts_2 = frags[frag_idx_2].verts();
+                    let verts_2_len = verts_2.len();
+
+                    for vert_a_idx_1 in 0..verts_1_len {
+                        for vert_a_idx_2 in 0..verts_2_len {
+                            // a and b are the vertices of the shared edge
+                            // 1 and 2 indicate if they are taken from fragment 1 or fragment 2
+                            let vert_a_1 = verts_1[vert_a_idx_1];
+
+                            if vert_a_1 != verts_2[vert_a_idx_2] {
+                                continue;
+                            };
+
+                            let vert_b_idx_1 = (vert_a_idx_1 + 1) % verts_1_len;
+                            let vert_b_idx_2 = (vert_a_idx_2 + verts_2_len - 1) % verts_2_len; // <- add len to avoid underflow
+
+                            let vert_b_1 = verts_1[vert_b_idx_1];
+
+                            if vert_b_1 != verts_2[vert_b_idx_2] {
+                                // since all shapes are defined to have vertices arranged counterclockwise, the second vertex of the edge is gonna be the next one
+                                // for the first fragment and the previous one for the second fragment
+                                continue;
+                            };
+
+                            // edge is shared between fragments
+
+                            // test convexity on the new vertices
+                            let prev_vert_a_1 = verts_1[(vert_a_idx_1 + verts_1_len - 1) % verts_1_len]; // <- vertex before a on fragment 1
+                            let next_vert_a_2 = verts_2[(vert_a_idx_2 + 1) % verts_2_len]; // <- vertex after a on fragment 2
+
+                            // test convexity on a
+                            if prev_vert_a_1.signed_area(vert_a_1, next_vert_a_2) >= -math::EPS {
+                                continue 'loop_2;
+                            }
+
+                            let prev_vert_b_2 = verts_2[(vert_b_idx_2 + verts_2_len - 1) % verts_2_len]; // <- vertex before b on fragment 2
+                            let next_vert_b_1 = verts_1[(vert_b_idx_1 + 1) % verts_1_len]; // <- vertex after b on fragment 1
+
+                            // test convexity on b
+                            if prev_vert_b_2.signed_area(vert_b_1, next_vert_b_1) >= -math::EPS {
+                                continue 'loop_2;
+                            }
+
+                            // compute pieces of fragments in order
+                            let (first_piece_1, second_piece_1) = if vert_a_idx_1 < vert_b_idx_1 {
+                                // normal edge
+                                (&verts_1[vert_b_idx_1..], &verts_1[..vert_a_idx_1])
+                            } else {
+                                // wrapping edge
+                                (&verts_1[vert_b_idx_1..vert_a_idx_1], &verts_1[0..0])
+                            };
+                            let (first_piece_2, second_piece_2) = if vert_b_idx_2 < vert_a_idx_2 {
+                                // normal edge
+                                (&verts_2[vert_a_idx_2..], &verts_2[..vert_b_idx_2])
+                            } else {
+                                // wrapping edge
+                                (&verts_2[vert_a_idx_2..vert_b_idx_2], &verts_2[0..0])
+                            };
+
+                            // polygon is gonna be convex
+                            let mut polygon_verts = Vec::with_capacity(verts_1_len + verts_2_len - 2);
+                            polygon_verts.extend_from_slice(first_piece_1);
+                            polygon_verts.extend_from_slice(second_piece_1);
+                            polygon_verts.extend_from_slice(first_piece_2);
+                            polygon_verts.extend_from_slice(second_piece_2);
+
+                            let polygon = CvxPoly::new_unchecked(polygon_verts);
+
+                            // remove higher index first to avoid deleting the wrong fragments on the second remove
+                            let high_idx = frag_idx_1.max(frag_idx_2);
+                            let low_idx = frag_idx_1.min(frag_idx_2);
+
+                            frags.remove(high_idx);
+                            frags.remove(low_idx);
+                            frags.push(Fragment::CvxPoly(polygon));
+                            merged_any = true;
+                            break 'loop_1;
+                        }
+                    }
+                }
+            }
+
+            if !merged_any {
+                break;
+            }
+        }
+
+        Ok(frags
+            .into_iter()
+            .map(|fragment| match fragment {
+                Fragment::Triangle(verts) => CvxPoly::new_unchecked(Vec::from(verts)),
+                Fragment::CvxPoly(cvx_poly) => cvx_poly,
+            })
+            .collect())
+    }
+}
+
+impl Validate for CavePoly {
+    #[inline]
+    fn validate(&self, warnings: bool) -> Result<(), base::GeometryError> {
+        let verts_len = self.verts.len();
+
+        if verts_len < 3 {
+            return Err(base::GeometryError::TooFewVertices(verts_len));
+        } else if warnings {
+            if verts_len == 3 {
+                eprintln!("warning: Shape::CavePoly with 3 vertices, consider Shape::Triangle for efficiency");
+            } else if verts_len == 4 {
+                eprintln!("warning: Shape::CavePoly with 4 vertices, consider Shape::Quad for efficiency unless you need concavity");
+            }
+        }
+
+        // check duplicates vertices
+        for i in 0..verts_len {
+            for j in (i + 1)..verts_len {
+                if self.verts[i].square_dist(self.verts[j]) < math::EPS_SQR {
+                    return Err(base::GeometryError::DuplicateVertices);
+                }
+            }
+        }
+
+        // check no collinear vertices
+        let mut signed_area_sum = 0.0;
+        for i in 0..verts_len {
+            let i1 = (i + 1) % verts_len;
+            let i2 = (i + 2) % verts_len;
+
+            let v0 = self.verts[i];
+            let v1 = self.verts[i1];
+            let v2 = self.verts[i2];
+
+            let area = self.verts[i].signed_area(v1, v2);
+            signed_area_sum += v0.cross(v1);
+
+            if area.abs() < math::EPS {
+                return Err(base::GeometryError::CollinearVertices);
+            }
+        }
+
+        if signed_area_sum.abs() < math::EPS {
+            return Err(base::GeometryError::CollinearVertices);
+        }
+
+        // check counterclockwise
+        if signed_area_sum >= math::EPS {
+            return Err(base::GeometryError::NotCounterClockWise);
+        }
+
+        // check no self-intersecting edges
+        for i in 0..verts_len {
+            let a1 = self.verts[i];
+            let a2 = self.verts[(i + 1) % verts_len];
+
+            for j in (i + 2)..verts_len {
+                // skip adjacent edges, that can only happen between first and last edges
+                if i == 0 && j == verts_len - 1 {
+                    continue;
+                }
+
+                let b1 = self.verts[j];
+                let b2 = self.verts[(j + 1) % verts_len];
+
+                if math::check_segments_intersection(a1, a2, b1, b2) {
+                    return Err(base::GeometryError::SelfIntersecting);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn normalize(&mut self) -> Result<(), base::GeometryError> {
+        let verts_len = self.verts.len();
+
+        if verts_len < 3 {
+            return Err(base::GeometryError::TooFewVertices(verts_len));
+        }
+
+        let mut signed_area_sum = 0.0;
+        for i in 0..verts_len {
+            let i1 = (i + 1) % verts_len;
+            let i2 = (i + 2) % verts_len;
+
+            let v0 = self.verts[i];
+            let v1 = self.verts[i1];
+            let v2 = self.verts[i2];
+
+            let area = self.verts[i].signed_area(v1, v2);
+            signed_area_sum += v0.cross(v1);
+
+            if area.abs() < math::EPS {
+                return Err(base::GeometryError::CollinearVertices);
+            }
+        }
+
+        if signed_area_sum.abs() < math::EPS {
+            return Err(base::GeometryError::CollinearVertices);
+        }
+
+        // check counterclockwise
+        if signed_area_sum >= math::EPS {
+            self.verts.reverse();
+            self.clear_cache();
+        }
+
+        Ok(())
+    }
+}
+
+impl Centroid for CavePoly {
+    #[inline]
+    fn centroid(&self) -> math::Vec2 {
+        let mut sum = math::ZERO_VEC2;
+        for vert in &self.verts {
+            sum.add_mut(*vert);
+        }
+        sum.scale(1.0 / self.verts.len() as f32)
+    }
+}
+
+impl ToHitBox for CavePoly {
+    #[inline]
+    fn to_hitbox(&self) -> HitBox {
+        HitBox::from_verts_slice(&self.verts)
+    }
+}
+
+impl SatCompatible for CavePoly {
+    #[inline]
+    fn sides_number(&self) -> usize {
+        self.verts().len()
+    }
+
+    #[inline]
+    fn append_sides(&self, _sides: &mut Vec<math::Vec2>) {
+        panic!("you cannot use sat on CavePoly directly")
+    }
+
+    #[inline]
+    fn project(&self, _axis: math::Vec2) -> (f32, f32) {
+        panic!("you cannot use sat on CavePoly directly")
+    }
+
+    #[inline]
+    fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError> {
+        self.cvx_polys().map(Some)
+    }
+}
+
+impl ApplyTransformationVerts for CavePoly {
+    type Output = Vec<math::Vec2>;
+    type OutputStep = Vec<math::Vec2>;
+
+    #[inline]
+    fn apply_vec2(&self, vec: math::Vec2) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(vert.add(vec));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3(&self, mat: &math::Mat2x3) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat.pre_mul_vec2(*vert));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self::Output {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat.pre_mul_vec2(*vert).add(vec));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_vec2_step(&self, vec_1: math::Vec2, vec_2: math::Vec2) -> Self::OutputStep {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(vert.add(vec_1));
+            verts.push(vert.add(vec_2));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3_step(&self, mat_1: &math::Mat2x3, mat_2: &math::Mat2x3) -> Self::OutputStep {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat_1.pre_mul_vec2(*vert));
+            verts.push(mat_2.pre_mul_vec2(*vert));
+        }
+
+        verts
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_step(
+        &self,
+        vec_1: math::Vec2,
+        vec_2: math::Vec2,
+        mat_1: &math::Mat2x3,
+        mat_2: &math::Mat2x3,
+    ) -> Self::OutputStep {
+        let mut verts = Vec::with_capacity(self.verts.len() * 2);
+
+        for vert in self.verts.iter() {
+            verts.push(mat_1.pre_mul_vec2(*vert).add(vec_1));
+            verts.push(mat_2.pre_mul_vec2(*vert).add(vec_2));
+        }
+
+        verts
+    }
+}
+
+impl ApplyTransformationShape for CavePoly {
+    #[inline]
+    fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
+        let new_verts = self.verts().into_iter().map(|v| vec.add(*v)).collect();
+
+        let new_cache = self
+            .cache
+            .apply_transformation(|t| t.apply_vec2_unchecked(vec), |cp| cp.apply_vec2_unchecked(vec));
+
+        let new_cave_poly = Self {
+            verts: new_verts,
+            cache: new_cache,
+        };
+
+        new_cave_poly.validate(true)?;
+
+        Ok(new_cave_poly)
+    }
+
+    #[inline]
+    fn apply_vec2_unchecked(&self, vec: math::Vec2) -> Self {
+        let new_verts = self.verts().into_iter().map(|v| vec.add(*v)).collect();
+
+        let new_cache = self
+            .cache
+            .apply_transformation(|t| t.apply_vec2_unchecked(vec), |cp| cp.apply_vec2_unchecked(vec));
+
+        Self {
+            verts: new_verts,
+            cache: new_cache,
+        }
+    }
+
+    #[inline]
+    fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        let new_verts = self.verts().into_iter().map(|v| mat.pre_mul_vec2(*v)).collect();
+
+        let new_cache = self
+            .cache
+            .apply_transformation(|t| t.apply_mat2x3_unchecked(mat), |cp| cp.apply_mat2x3_unchecked(mat));
+
+        let new_cave_poly = Self {
+            verts: new_verts,
+            cache: new_cache,
+        };
+
+        new_cave_poly.validate(true)?;
+
+        Ok(new_cave_poly)
+    }
+
+    #[inline]
+    fn apply_mat2x3_unchecked(&self, mat: &math::Mat2x3) -> Self {
+        let new_verts = self.verts().into_iter().map(|v| mat.pre_mul_vec2(*v)).collect();
+
+        let new_cache = self
+            .cache
+            .apply_transformation(|t| t.apply_mat2x3_unchecked(mat), |cp| cp.apply_mat2x3_unchecked(mat));
+
+        Self {
+            verts: new_verts,
+            cache: new_cache,
+        }
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
+        let new_verts = self.verts().into_iter().map(|v| mat.pre_mul_vec2(*v).add(vec)).collect();
+
+        let new_cache = self.cache.apply_transformation(
+            |t| t.apply_mat2x3_then_vec2_unchecked(vec, mat),
+            |cp| cp.apply_mat2x3_then_vec2_unchecked(vec, mat),
+        );
+
+        let new_cave_poly = Self {
+            verts: new_verts,
+            cache: new_cache,
+        };
+
+        new_cave_poly.validate(true)?;
+
+        Ok(new_cave_poly)
+    }
+
+    #[inline]
+    fn apply_mat2x3_then_vec2_unchecked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Self {
+        let new_verts = self.verts().into_iter().map(|v| mat.pre_mul_vec2(*v).add(vec)).collect();
+
+        let new_cache = self.cache.apply_transformation(
+            |t| t.apply_mat2x3_then_vec2_unchecked(vec, mat),
+            |cp| cp.apply_mat2x3_then_vec2_unchecked(vec, mat),
+        );
+
+        Self {
+            verts: new_verts,
+            cache: new_cache,
+        }
+    }
+}
+
+impl fmt::Display for CavePoly {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "concave polygon (")?;
         for (i, vert) in self.verts.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;

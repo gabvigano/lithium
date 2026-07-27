@@ -58,7 +58,7 @@ where
     }
 
     #[inline]
-    pub fn send_bytes(&self, bytes: &Vec<u8>, address: SocketAddr) -> Result<(), base::NetworkError> {
+    pub fn send_bytes(&self, bytes: &[u8], address: SocketAddr) -> Result<(), base::NetworkError> {
         self.socket.send_to(bytes, address)?;
         Ok(())
     }
@@ -275,7 +275,7 @@ impl<S: Encode, I: Encode> ServerSession<S, I> {
         &mut self,
         world: &ecs::World<0>,
         tick: base::Tick,
-        clients: &Vec<SocketAddr>,
+        clients: &[SocketAddr],
         mut send_packet: F,
     ) -> Result<(), base::NetworkError>
     where

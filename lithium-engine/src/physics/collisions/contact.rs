@@ -1,5 +1,5 @@
 use crate::math::ApplyTransformationVerts;
-use crate::{ecs, math};
+use crate::{base, ecs, math};
 
 enum Feature {
     Vertex(math::Vec2),
@@ -44,11 +44,18 @@ pub fn compute_contact_point(
     ang_vel_2: Option<f32>,
     body_1: &ecs::Body,
     body_2: &ecs::Body,
-) -> math::Vec2 {
+    cave_part_idx_1: usize,
+    cave_part_idx_2: usize,
+) -> Result<math::Vec2, base::GeometryError> {
     const FEATURE_MARGIN: f32 = 0.05;
     const PARALLEL_EPS: f32 = 0.02;
 
-    fn find_support_feature(normal: math::Vec2, rot_mat: Option<&ecs::RotationMatrix>, shape: &math::Shape) -> Feature {
+    fn find_support_feature(
+        normal: math::Vec2,
+        rot_mat: Option<&ecs::RotationMatrix>,
+        shape: &math::Shape,
+        cave_part_idx: usize,
+    ) -> Result<Feature, base::GeometryError> {
         fn find_support_feature_from_pairs(pairs: &[(math::Vec2, f32)]) -> Feature {
             let n_sides = pairs.len();
 
@@ -74,7 +81,46 @@ pub fn compute_contact_point(
                 Feature::Vertex(pairs[best_idx].0)
             }
         }
-        match shape {
+
+        fn find_support_feature_cvx_poly(normal: math::Vec2, rot_mat: Option<&ecs::RotationMatrix>, cvx_poly: &math::CvxPoly) -> Feature {
+            let verts = match rot_mat {
+                Some(ecs::RotationMatrix { rot_mat: rm }) => &cvx_poly.apply_mat2x3(rm),
+                None => &cvx_poly.verts,
+            };
+
+            let n_sides = verts.len();
+
+            let mut best_idx = 0;
+            let mut best_dot = verts[0].dot(normal);
+
+            for i in 1..n_sides {
+                let dot = verts[i].dot(normal);
+                if dot > best_dot {
+                    best_dot = dot;
+                    best_idx = i;
+                }
+            }
+
+            let prev_idx = (best_idx + n_sides - 1) % n_sides;
+            let next_idx = (best_idx + 1) % n_sides;
+
+            let prev_dot = verts[prev_idx].dot(normal);
+            let next_dot = verts[next_idx].dot(normal);
+
+            let (second_idx, second_dot) = if prev_dot >= next_dot {
+                (prev_idx, prev_dot)
+            } else {
+                (next_idx, next_dot)
+            };
+
+            if best_dot - second_dot <= FEATURE_MARGIN {
+                Feature::Edge(math::Segment::new_unchecked(verts[best_idx], verts[second_idx]))
+            } else {
+                Feature::Vertex(verts[best_idx])
+            }
+        }
+
+        Ok(match shape {
             math::Shape::Segment(segment) => {
                 let [a, b] = match rot_mat {
                     Some(ecs::RotationMatrix { rot_mat: rm }) => segment.apply_mat2x3(rm),
@@ -112,45 +158,13 @@ pub fn compute_contact_point(
 
                 find_support_feature_from_pairs(&pairs)
             }
-            math::Shape::Polygon(polygon) => {
-                let verts = match rot_mat {
-                    Some(ecs::RotationMatrix { rot_mat: rm }) => &polygon.apply_mat2x3(rm),
-                    None => &polygon.verts,
-                };
-
-                let n_sides = verts.len();
-
-                let mut best_idx = 0;
-                let mut best_dot = verts[0].dot(normal);
-
-                for i in 1..n_sides {
-                    let dot = verts[i].dot(normal);
-                    if dot > best_dot {
-                        best_dot = dot;
-                        best_idx = i;
-                    }
-                }
-
-                let prev_idx = (best_idx + n_sides - 1) % n_sides;
-                let next_idx = (best_idx + 1) % n_sides;
-
-                let prev_dot = verts[prev_idx].dot(normal);
-                let next_dot = verts[next_idx].dot(normal);
-
-                let (second_idx, second_dot) = if prev_dot >= next_dot {
-                    (prev_idx, prev_dot)
-                } else {
-                    (next_idx, next_dot)
-                };
-
-                if best_dot - second_dot <= FEATURE_MARGIN {
-                    Feature::Edge(math::Segment::new_unchecked(verts[best_idx], verts[second_idx]))
-                } else {
-                    Feature::Vertex(verts[best_idx])
-                }
+            math::Shape::CvxPoly(cvx_poly) => find_support_feature_cvx_poly(normal, rot_mat, cvx_poly),
+            math::Shape::CavePoly(cave_poly) => {
+                let cvx_polys = cave_poly.cvx_polys()?;
+                find_support_feature_cvx_poly(normal, rot_mat, &cvx_polys[cave_part_idx])
             }
             math::Shape::Circle(_) => unimplemented!(),
-        }
+        })
     }
 
     fn project_vertex_on_segment(vertex: math::Vec2, segment: &math::Segment, to_clamp: bool) -> math::Vec2 {
@@ -244,7 +258,7 @@ pub fn compute_contact_point(
 
         let mut pairs = [(a, a), (b, b), (c, c_proj), (d, d_proj)];
 
-        if (a.x - b.x).abs() > math::EPS {
+        if (a.x - b.x).abs() >= math::EPS {
             // non-vertical lines
             let overlap_start_x = (a.x.min(b.x)).max(c_proj.x.min(d_proj.x));
             let overlap_end_x = (a.x.max(b.x)).min(c_proj.x.max(d_proj.x));
@@ -300,13 +314,13 @@ pub fn compute_contact_point(
     };
 
     // find support vertices
-    let mut support_1 = find_support_feature(normal, global_rot_mat_1, &body_1.shape);
-    let mut support_2 = find_support_feature(normal.neg(), global_rot_mat_2, &body_2.shape);
+    let mut support_1 = find_support_feature(normal, global_rot_mat_1, &body_1.shape, cave_part_idx_1)?;
+    let mut support_2 = find_support_feature(normal.rev(), global_rot_mat_2, &body_2.shape, cave_part_idx_2)?;
 
     support_1.apply_vec2_mut(global_pos_1);
     support_2.apply_vec2_mut(global_pos_2);
 
-    match (support_1, support_2) {
+    Ok(match (support_1, support_2) {
         (Feature::Vertex(vertex_1), Feature::Vertex(vertex_2)) => vertex_1.midpoint(vertex_2),
         (Feature::Vertex(vertex), Feature::Edge(segment)) | (Feature::Edge(segment), Feature::Vertex(vertex)) => {
             let proj = project_vertex_on_segment(vertex, &segment, true);
@@ -371,5 +385,5 @@ pub fn compute_contact_point(
                 }
             }
         }
-    }
+    })
 }

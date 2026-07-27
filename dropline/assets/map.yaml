@@ -442,7 +442,7 @@
 - entity: 14
   kind: body
   data:
-    shape: !Polygon
+    shape: !CvxPoly
       verts:
         - { x: -30.0, y: 0.0 }
         - { x: -5.0, y: 15.0 }
@@ -477,7 +477,7 @@
 - entity: 15
   kind: body
   data:
-    shape: !Polygon
+    shape: !CvxPoly
       verts:
         - { x: -30.0, y: 5.0 }
         - { x: -20.0, y: 40.0 }

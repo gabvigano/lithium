@@ -28,6 +28,17 @@ pub fn clamp_min(value: &mut f32, min: f32) {
     *value = value.max(min);
 }
 
+/// checks if 2 segments are intersecting
+#[inline]
+pub fn check_segments_intersection(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> bool {
+    let d1 = a1.signed_area(a2, b1);
+    let d2 = a1.signed_area(a2, b2);
+    let d3 = b1.signed_area(b2, a1);
+    let d4 = b1.signed_area(b2, a2);
+
+    d1 * d2 < -EPS && d3 * d4 < -EPS
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Encode, Decode, Deserialize)]
 pub struct Vec2 {
     pub x: f32,
@@ -57,12 +68,12 @@ impl Vec2 {
 
     #[inline]
     pub fn approx_equal(self, vec2: Self) -> bool {
-        (self.x - vec2.x).abs() <= EPS && (self.y - vec2.y).abs() <= EPS
+        (self.x - vec2.x).abs() < EPS && (self.y - vec2.y).abs() < EPS
     }
 
     #[inline]
     pub fn approx_equal_zero(self) -> bool {
-        self.x.abs() <= EPS && self.y.abs() <= EPS
+        self.x.abs() < EPS && self.y.abs() < EPS
     }
 
     #[inline]
@@ -156,12 +167,12 @@ impl Vec2 {
     }
 
     #[inline]
-    pub fn neg(self) -> Self {
+    pub fn rev(self) -> Self {
         Self::new(-self.x, -self.y)
     }
 
     #[inline]
-    pub fn neg_mut(&mut self) {
+    pub fn rev_mut(&mut self) {
         self.x = -self.x;
         self.y = -self.y;
     }
@@ -244,6 +255,35 @@ impl Vec2 {
     #[inline]
     pub fn midpoint(self, point: Self) -> Self {
         self.add(point).scale(0.5)
+    }
+
+    /// barycentric coordinate method
+    #[inline]
+    pub fn is_inside_3_vec2(self, a: Self, b: Self, c: Self) -> bool {
+        let v0 = c.sub(a);
+        let v1 = b.sub(a);
+        let v2 = self.sub(a);
+
+        let denominator = v0.cross(v1);
+
+        if denominator.abs() < EPS {
+            return false;
+        }
+
+        if denominator > 0.0 {
+            let u = v2.cross(v1);
+            let v = v0.cross(v2);
+            (u > -EPS) && (v > -EPS) && (u + v <= denominator + EPS)
+        } else {
+            let u = v1.cross(v2);
+            let v = v2.cross(v0);
+            (u > -EPS) && (v > -EPS) && (u + v <= -denominator - EPS)
+        }
+    }
+
+    #[inline]
+    pub fn is_inside_3_ccw_vec2(self, a: Self, b: Self, c: Self) -> bool {
+        a.signed_area(b, self) < EPS && b.signed_area(c, self) < EPS && c.signed_area(a, self) < EPS
     }
 }
 
@@ -347,22 +387,22 @@ impl Mat2x3 {
 
     #[inline]
     pub fn approx_equal(&self, mat2: &Self) -> bool {
-        (self.x.0 - mat2.x.0).abs() <= EPS
-            && (self.x.1 - mat2.x.1).abs() <= EPS
-            && (self.y.0 - mat2.y.0).abs() <= EPS
-            && (self.y.1 - mat2.y.1).abs() <= EPS
-            && (self.z.0 - mat2.z.0).abs() <= EPS
-            && (self.z.1 - mat2.z.1).abs() <= EPS
+        (self.x.0 - mat2.x.0).abs() < EPS
+            && (self.x.1 - mat2.x.1).abs() < EPS
+            && (self.y.0 - mat2.y.0).abs() < EPS
+            && (self.y.1 - mat2.y.1).abs() < EPS
+            && (self.z.0 - mat2.z.0).abs() < EPS
+            && (self.z.1 - mat2.z.1).abs() < EPS
     }
 
     #[inline]
     pub fn approx_equal_identity(&self) -> bool {
-        (self.x.0 - 1.0).abs() <= EPS
-            && self.x.1.abs() <= EPS
-            && self.y.0.abs() <= EPS
-            && (self.y.1 - 1.0).abs() <= EPS
-            && self.z.0.abs() <= EPS
-            && self.z.1.abs() <= EPS
+        (self.x.0 - 1.0).abs() < EPS
+            && self.x.1.abs() < EPS
+            && self.y.0.abs() < EPS
+            && (self.y.1 - 1.0).abs() < EPS
+            && self.z.0.abs() < EPS
+            && self.z.1.abs() < EPS
     }
 
     #[inline]

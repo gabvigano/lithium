@@ -168,17 +168,15 @@ pub fn apply_force_at_point<const N: usize>(
 
 #[inline]
 pub fn apply_all_trans<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity) -> Option<math::Shape> {
-    let mut shape = world.engine.body.get(entity)?.shape.clone();
+    let shape = &world.engine.body.get(entity)?.shape;
 
-    shape = match world.engine.rotation_matrix.get(entity) {
-        Some(rotation_matrix) => shape.apply_mat2x3_unchecked(&rotation_matrix.rot_mat),
-        None => shape,
-    };
+    let transform = world.engine.transform.get(entity);
+    let rotation_matrix = world.engine.rotation_matrix.get(entity);
 
-    shape = match world.engine.transform.get(entity) {
-        Some(tranform) => shape.apply_vec2_unchecked(tranform.pos),
-        None => shape,
-    };
-
-    Some(shape)
+    Some(match (transform, rotation_matrix) {
+        (Some(transform), Some(rotation_matrix)) => shape.apply_mat2x3_then_vec2_unchecked(transform.pos, &rotation_matrix.rot_mat),
+        (Some(transform), None) => shape.apply_vec2_unchecked(transform.pos),
+        (None, Some(rotation)) => shape.apply_mat2x3_unchecked(&rotation.rot_mat),
+        (None, None) => shape.clone(),
+    })
 }

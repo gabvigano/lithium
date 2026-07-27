@@ -80,7 +80,7 @@ where
     }
 
     #[inline]
-    pub fn send_bytes(&self, bytes: &Vec<u8>) -> Result<(), base::NetworkError> {
+    pub fn send_bytes(&self, bytes: &[u8]) -> Result<(), base::NetworkError> {
         self.socket.send(bytes)?;
         Ok(())
     }

@@ -132,8 +132,12 @@ impl fmt::Display for MathError {
 pub enum GeometryError {
     TooFewVertices(usize),
     DuplicateVertices,
+    CollinearVertices,
+    SelfIntersecting,
+    NotCounterClockWise,
     NotConvex,
     NormalizationError,
+    InvalidShape,
 }
 
 impl error::Error for GeometryError {}
@@ -143,8 +147,12 @@ impl fmt::Display for GeometryError {
         match self {
             GeometryError::TooFewVertices(verts) => write!(f, "cannot build this shape with only {verts} vertices"),
             GeometryError::DuplicateVertices => write!(f, "shape has overlapping or duplicate vertices"),
+            GeometryError::CollinearVertices => write!(f, "shape has collinear vertices"),
+            GeometryError::SelfIntersecting => write!(f, "shape has self-intersecting vertices"),
+            GeometryError::NotCounterClockWise => write!(f, "shape's vertices are store clockwise, but counterclockwise is required"),
             GeometryError::NotConvex => write!(f, "shape must be convex"),
             GeometryError::NormalizationError => write!(f, "number of vertices changed during normalization"),
+            GeometryError::InvalidShape => write!(f, "shape is not valid"),
         }
     }
 }

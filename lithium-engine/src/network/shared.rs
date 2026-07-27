@@ -63,8 +63,8 @@ impl<I: PartialEq> InputMap<I> {
     }
 
     #[inline]
-    pub fn get_tick(&self, tick: base::Tick) -> Option<&Vec<(ecs::Entity, I)>> {
-        self.inputs.get(&tick)
+    pub fn get_tick(&self, tick: base::Tick) -> Option<&[(ecs::Entity, I)]> {
+        self.inputs.get(&tick).map(Vec::as_slice)
     }
 
     #[inline]

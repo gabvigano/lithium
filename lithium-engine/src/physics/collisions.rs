@@ -4,4 +4,4 @@ pub mod resolution;
 
 pub use contact::*;
 pub use detection::*;
-pub use resolution::*;
+pub(crate) use resolution::*;

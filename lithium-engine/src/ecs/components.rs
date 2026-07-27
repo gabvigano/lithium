@@ -110,7 +110,7 @@ impl RotationMatrix {
 
     #[inline]
     pub fn update(&self, delta_rot: math::Radians, pivot: math::Vec2) -> Self {
-        if delta_rot.0.abs() <= math::EPS {
+        if delta_rot.0.abs() < math::EPS {
             // early return deltas close to 0
             return self.clone();
         }
@@ -124,7 +124,7 @@ impl RotationMatrix {
 
     #[inline]
     pub fn update_mut(&mut self, delta_rot: math::Radians, pivot: math::Vec2) -> bool {
-        if delta_rot.0.abs() <= math::EPS {
+        if delta_rot.0.abs() < math::EPS {
             // early return deltas close to 0
             return false;
         }
