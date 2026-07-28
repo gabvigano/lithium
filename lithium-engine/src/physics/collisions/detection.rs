@@ -45,7 +45,7 @@ where
             if overlap < *best_overlap {
                 // update the normal data
                 *best_overlap = overlap;
-                *best_normal = if delta.dot(axis) < 0.0 { axis.rev() } else { axis }; // invert the normal direction if it is not from swept_shape_1 to swept_shape_2
+                *best_normal = if delta.dot(axis) < 0.0 { axis.rev() } else { axis }; // invert the normal direction if it is not from geometry_1 to geometry_2
             }
         }
 
@@ -59,7 +59,7 @@ where
     // compute centroids
     let centroid_1 = geometry_1.centroid();
     let centroid_2 = geometry_2.centroid();
-    let delta = centroid_2.sub(centroid_1); // points from swept_shape_1 to swept_shape_2
+    let delta = centroid_2.sub(centroid_1); // points from geometry_1 to geometry_2
 
     // initialize normal data
     let mut best_overlap = f32::INFINITY;
@@ -120,6 +120,8 @@ where
         }
     }
 
+    // todo: here, for CavePoly we should only take results from sat if the edge tested is external in the original CavePoly
+
     Ok(match (cave_parts_1, cave_parts_2) {
         (None, None) => check_sat_cvx(geometry_1, geometry_2).map(|(overlap, normal)| SatCollision {
             overlap,
@@ -176,225 +178,100 @@ where
     })
 }
 
-/// computes hitbox of a swept shape, without computing the swept shape
 pub fn compute_hitbox(
     state: State,
-    pos: math::Vec2,
+    mut pos: math::Vec2,
     rot_mat: Option<&ecs::RotationMatrix>,
     lin_vel: Option<math::Vec2>,
     ang_vel: Option<f32>,
     body: &ecs::Body,
+    step: f32,
 ) -> math::HitBox {
-    let static_or_still = matches!(state, State::Static | State::Still);
+    let rot_mat_2 = if !matches!(state, State::Static | State::Still) {
+        pos = match lin_vel {
+            Some(lv) => pos.add(lv.scale(step)),
+            None => pos,
+        };
 
-    let pos_2 = match lin_vel {
-        Some(lv) => pos.add(lv),
-        None => pos,
+        match (rot_mat, ang_vel) {
+            (Some(rm), Some(av)) => Some(rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body.centroid))),
+            (Some(_), None) | (None, None) => None,
+            (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"), // <- thanks Lyla for fixing the error message
+        }
+    } else {
+        None
     };
 
-    let rot_mat_2: Option<&ecs::RotationMatrix> = match (rot_mat, ang_vel) {
-        (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av), rm.rot_mat.pre_mul_vec2(body.centroid))),
-        (Some(rm), None) => Some(rm),
-        (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"),
-        (None, None) => None,
-    };
+    let rot_mat = rot_mat_2.as_ref().or(rot_mat);
 
-    fn compute_hitbox_poly<P>(
-        poly: &P,
-        static_or_still: bool,
-        pos: math::Vec2,
-        pos_2: math::Vec2,
-        rot_mat: Option<&ecs::RotationMatrix>,
-        rot_mat_2: Option<&ecs::RotationMatrix>,
-    ) -> math::HitBox
+    fn compute_hitbox_poly<P>(poly: &P, pos: math::Vec2, rot_mat: Option<&ecs::RotationMatrix>) -> math::HitBox
     where
         P: ApplyTransformationVerts<Output = Vec<math::Vec2>, OutputStep = Vec<math::Vec2>>,
     {
-        if static_or_still {
-            // if it is still or static, apply the global position and, if it exists, the rotation
-            let verts = match rot_mat {
-                Some(ecs::RotationMatrix { rot_mat: rm }) => &poly.apply_mat2x3_then_vec2(pos, rm),
-                None => &poly.apply_vec2(pos),
-            };
-            math::HitBox::from_verts_slice(verts)
-        } else {
-            // if it is far or active use the step variant, which takes into account the movement between one frame and the next
-            let verts = match (rot_mat, rot_mat_2) {
-                (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                    &poly.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                }
-                (Some(ecs::RotationMatrix { rot_mat: rm }), None) => &poly.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"), // <- thanks Lyla for fixing the error message
-                (None, None) => &poly.apply_vec2_step(pos, pos_2),
-            };
-            math::HitBox::from_verts_slice(verts)
-        }
+        let verts = match rot_mat {
+            Some(ecs::RotationMatrix { rot_mat: rm }) => &poly.apply_mat2x3_then_vec2(pos, rm),
+            None => &poly.apply_vec2(pos),
+        };
+        math::HitBox::from_verts_slice(verts)
     }
 
     match &body.shape {
         math::Shape::Segment(segment) => {
-            if static_or_still {
-                // if it is still or static, apply the global position and, if it exists, the rotation
-                let verts = match rot_mat {
-                    Some(ecs::RotationMatrix { rot_mat: rm }) => &segment.apply_mat2x3_then_vec2(pos, rm),
-                    None => &segment.apply_vec2(pos),
-                };
-                math::HitBox::from_verts_array(verts)
-            } else {
-                // if it is far or active use the step variant, which takes into account the movement between one frame and the next
-                let verts = match (rot_mat, rot_mat_2) {
-                    (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                        &segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                    }
-                    (Some(ecs::RotationMatrix { rot_mat: rm }), None) => &segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                    (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                    (None, None) => &segment.apply_vec2_step(pos, pos_2),
-                };
-                math::HitBox::from_verts_array(verts)
-            }
+            let verts = match rot_mat {
+                Some(ecs::RotationMatrix { rot_mat: rm }) => &segment.apply_mat2x3_then_vec2(pos, rm),
+                None => &segment.apply_vec2(pos),
+            };
+            math::HitBox::from_verts_array(verts)
         }
         math::Shape::Triangle(triangle) => {
-            if static_or_still {
-                // if it is still or static, apply the global position and, if it exists, the rotation
-                let verts = match rot_mat {
-                    Some(ecs::RotationMatrix { rot_mat: rm }) => &triangle.apply_mat2x3_then_vec2(pos, rm),
-                    None => &triangle.apply_vec2(pos),
-                };
-                math::HitBox::from_verts_array(verts)
-            } else {
-                // if it is far or active use the step variant, which takes into account the movement between one frame and the next
-                let verts = match (rot_mat, rot_mat_2) {
-                    (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                        &triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                    }
-                    (Some(ecs::RotationMatrix { rot_mat: rm }), None) => &triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                    (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                    (None, None) => &triangle.apply_vec2_step(pos, pos_2),
-                };
-                math::HitBox::from_verts_array(verts)
-            }
+            let verts = match rot_mat {
+                Some(ecs::RotationMatrix { rot_mat: rm }) => &triangle.apply_mat2x3_then_vec2(pos, rm),
+                None => &triangle.apply_vec2(pos),
+            };
+            math::HitBox::from_verts_array(verts)
         }
         math::Shape::Quad(quad) => {
-            if static_or_still {
-                // if it is still or static, apply the global position and, if it exists, the rotation
-                let verts = match rot_mat {
-                    Some(ecs::RotationMatrix { rot_mat: rm }) => &quad.apply_mat2x3_then_vec2(pos, rm),
-                    None => &quad.apply_vec2(pos),
-                };
-                math::HitBox::from_verts_array(verts)
-            } else {
-                // if it is far or active use the step variant, which takes into account the movement between one frame and the next
-                let verts = match (rot_mat, rot_mat_2) {
-                    (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                        &quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                    }
-                    (Some(ecs::RotationMatrix { rot_mat: rm }), None) => &quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                    (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                    (None, None) => &quad.apply_vec2_step(pos, pos_2),
-                };
-                math::HitBox::from_verts_array(verts)
-            }
+            let verts = match rot_mat {
+                Some(ecs::RotationMatrix { rot_mat: rm }) => &quad.apply_mat2x3_then_vec2(pos, rm),
+                None => &quad.apply_vec2(pos),
+            };
+            math::HitBox::from_verts_array(verts)
         }
-        math::Shape::CvxPoly(cvx_poly) => compute_hitbox_poly(cvx_poly, static_or_still, pos, pos_2, rot_mat, rot_mat_2),
-        math::Shape::CavePoly(cave_poly) => compute_hitbox_poly(cave_poly, static_or_still, pos, pos_2, rot_mat, rot_mat_2),
+        math::Shape::CvxPoly(cvx_poly) => compute_hitbox_poly(cvx_poly, pos, rot_mat),
+        math::Shape::CavePoly(cave_poly) => compute_hitbox_poly(cave_poly, pos, rot_mat),
         math::Shape::Circle(_) => unimplemented!(),
     }
 }
 
-/// computes swept shape of a stationary or moving shape
-pub fn compute_swept_shape(
+pub fn compute_global_shape(
     state: State,
-    pos: math::Vec2,
+    mut pos: math::Vec2,
     rot_mat: Option<&ecs::RotationMatrix>,
     lin_vel: Option<math::Vec2>,
     ang_vel: Option<f32>,
     body: &ecs::Body,
-) -> math::SweptShape {
-    if matches!(state, State::Static | State::Still) {
-        // if it is still or static, apply the global position and, if it exists, the rotation
-        let shape = match rot_mat {
-            Some(ecs::RotationMatrix { rot_mat: rm }) => body.shape.apply_mat2x3_then_vec2_unchecked(pos, rm),
-            None => body.shape.apply_vec2_unchecked(pos),
+    step: f32,
+) -> math::Shape {
+    let rot_mat_2 = if !matches!(state, State::Static | State::Still) {
+        pos = match lin_vel {
+            Some(lv) => pos.add(lv.scale(step)),
+            None => pos,
         };
-        return math::SweptShape::Unchanged(shape);
-    }
 
-    let pos_2 = match lin_vel {
-        Some(v) => pos.add(v),
-        None => pos,
+        match (rot_mat, ang_vel) {
+            (Some(rm), Some(av)) => Some(rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body.centroid))),
+            (Some(_), None) | (None, None) => None,
+            (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"), // <- thanks Lyla for fixing the error message
+        }
+    } else {
+        None
     };
 
-    let rot_mat_2: Option<&ecs::RotationMatrix> = match (rot_mat, ang_vel) {
-        (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av), rm.rot_mat.pre_mul_vec2(body.centroid))),
-        (Some(rm), None) => Some(rm),
-        (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"),
-        (None, None) => None,
-    };
+    let rot_mat = rot_mat_2.as_ref().or(rot_mat);
 
-    // if it is far or active use the step variant, which takes into account the movement between one frame and the next
-    match &body.shape {
-        math::Shape::Segment(segment) => {
-            let mut verts = match (rot_mat, rot_mat_2) {
-                (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                    segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                }
-                (Some(ecs::RotationMatrix { rot_mat: rm }), None) => segment.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                (None, None) => segment.apply_vec2_step(pos, pos_2),
-            };
-            math::SweptShape::Changed(math::convex_hull(&mut verts).unwrap())
-        }
-        math::Shape::Triangle(triangle) => {
-            let mut verts = match (rot_mat, rot_mat_2) {
-                (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                    triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                }
-                (Some(ecs::RotationMatrix { rot_mat: rm }), None) => triangle.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                (None, None) => triangle.apply_vec2_step(pos, pos_2),
-            };
-            math::SweptShape::Changed(math::convex_hull(&mut verts).unwrap())
-        }
-        math::Shape::Quad(quad) => {
-            let mut verts = match (rot_mat, rot_mat_2) {
-                (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                    quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                }
-                (Some(ecs::RotationMatrix { rot_mat: rm }), None) => quad.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                (None, None) => quad.apply_vec2_step(pos, pos_2),
-            };
-            math::SweptShape::Changed(math::convex_hull(&mut verts).unwrap())
-        }
-        math::Shape::CvxPoly(cvx_poly) => {
-            let mut verts = match (rot_mat, rot_mat_2) {
-                (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                    cvx_poly.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                }
-                (Some(ecs::RotationMatrix { rot_mat: rm }), None) => cvx_poly.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                (None, None) => cvx_poly.apply_vec2_step(pos, pos_2),
-            };
-            math::SweptShape::Changed(math::convex_hull(&mut verts).unwrap())
-        }
-        math::Shape::CavePoly(cave_poly) => {
-            let mut verts = match (rot_mat, rot_mat_2) {
-                (Some(ecs::RotationMatrix { rot_mat: rm }), Some(ecs::RotationMatrix { rot_mat: rm_2 })) => {
-                    cave_poly.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm_2)
-                }
-                (Some(ecs::RotationMatrix { rot_mat: rm }), None) => cave_poly.apply_mat2x3_then_vec2_step(pos, pos_2, rm, rm),
-                (None, Some(_)) => panic!("rot_mat_2 exists but rot_mat does not"),
-                (None, None) => cave_poly.apply_vec2_step(pos, pos_2),
-            };
-            math::SweptShape::Changed(math::convex_hull(&mut verts).unwrap())
-            // todo: using convex_hull for a cave_poly is wrong, it's just an approximation: the correct swept_shape would be concave
-            // the same thing for any rotating shape, which would generate an even more complex swept_shape (a concave polygon with some rounded edges)
-            //
-            // we need to implement an algorithm to generate the concave swept_shape for cave_poly, and also for rotating shape (we can use a cave_poly,
-            // which would still be an approximation but much closer to reality). We can either add a third kind of swept_shape that is like ::changed but
-            // with a cave_poly, or we can just change ::changed variant to use cave_poly
-        }
-        math::Shape::Circle(_) => unimplemented!(),
+    match rot_mat {
+        Some(ecs::RotationMatrix { rot_mat: rm }) => body.shape.apply_mat2x3_then_vec2_unchecked(pos, rm),
+        None => body.shape.apply_vec2_unchecked(pos),
     }
 }
 
@@ -409,7 +286,7 @@ pub enum State {
 }
 
 /// detects collisions and computes reactions for every object
-pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usize) -> Result<(), base::GeometryError> {
+pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usize, step: f32) -> Result<(), base::GeometryError> {
     #[inline]
     fn get_state<const N: usize>(world: &ecs::World<N>, entity: ecs::Entity) -> State {
         let mut translation_is_zero = false; // true -> exists but is 0; false -> does not exist
@@ -523,10 +400,10 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                 continue 'loop_1;
             };
 
-            // initialize hitbox and swept shape cache
-            let mut hitbox_1 = Some(compute_hitbox(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1));
-
-            let mut swept_shape_1: Option<math::SweptShape> = None;
+            // initialize hitbox, global shape and mass center cache
+            let mut hitbox_1 = Some(compute_hitbox(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1, step));
+            let mut global_shape_1: Option<math::Shape> = None;
+            let mut mass_center_1 = math::ZERO_VEC2;
 
             'loop_2: for idx_2 in 0..len {
                 let state_2 = states[idx_2];
@@ -575,10 +452,10 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                 // broad phase
                 if hitbox_1.is_none() {
                     // println!("recomputing hitbox_1 cache");
-                    hitbox_1 = Some(compute_hitbox(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1));
+                    hitbox_1 = Some(compute_hitbox(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1, step));
                 }
 
-                let hitbox_2 = compute_hitbox(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2);
+                let hitbox_2 = compute_hitbox(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2, step);
 
                 // println!("{entity_1}-{entity_2} checking hitboxes...");
                 if !check_hitboxes(hitbox_1.as_ref().unwrap(), &hitbox_2) {
@@ -588,27 +465,30 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                 }
                 // println!("  -> hitboxes ARE colliding");
 
-                // hitboxes are colliding, compute swept shapes
-                if swept_shape_1.is_none() {
-                    // println!("recomputing swept_shape_1 cache");
-                    swept_shape_1 = Some(compute_swept_shape(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1));
+                // hitboxes are colliding, compute global shapes
+                if global_shape_1.is_none() {
+                    // println!("recomputing global_shape_1 cache");
+                    let global_shape = compute_global_shape(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1, step);
+                    mass_center_1 = global_shape.centroid();
+                    global_shape_1 = Some(global_shape);
                 }
 
-                let swept_shape_2 = compute_swept_shape(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2);
+                let global_shape_2 = compute_global_shape(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2, step);
+                let mass_center_2 = global_shape_2.centroid();
 
-                // println!("{entity_1}-{entity_2} checking swept shapes...");
+                // println!("{entity_1}-{entity_2} checking global shapes...");
                 let Some(SatCollision {
                     overlap: _,
                     normal,
                     cave_part_idx_1,
                     cave_part_idx_2,
-                }) = check_sat(swept_shape_1.as_ref().unwrap(), &swept_shape_2)?
+                }) = check_sat(global_shape_1.as_ref().unwrap(), &global_shape_2)?
                 else {
-                    // swept shapes are not colliding, no need to compute reaction or invalidate cache
-                    // println!("  -> swept shapes NOT colliding");
+                    // global shapes are not colliding, no need to compute reaction or invalidate cache
+                    // println!("  -> global shapes NOT colliding");
                     continue 'loop_2;
                 };
-                // println!("  -> swept shapes ARE colliding");
+                // println!("  -> global shapes ARE colliding");
 
                 // compute contact point and centers of mass
                 let contact_point = physics::compute_contact_point(
@@ -625,24 +505,8 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                     body_2,
                     cave_part_idx_1,
                     cave_part_idx_2,
+                    step,
                 )?;
-
-                let mass_center_1 = match rot_mat_1 {
-                    Some(rot_mat) => rot_mat
-                        .rot_mat
-                        .pre_mul_vec2(body_1.centroid())
-                        .add(pos_1)
-                        .add(lin_vel_1.unwrap_or(math::Vec2::zero())),
-                    None => body_1.centroid().add(pos_1).add(lin_vel_1.unwrap_or(math::Vec2::zero())),
-                };
-                let mass_center_2 = match rot_mat_2 {
-                    Some(rot_mat) => rot_mat
-                        .rot_mat
-                        .pre_mul_vec2(body_2.centroid())
-                        .add(pos_2)
-                        .add(lin_vel_2.unwrap_or(math::Vec2::zero())),
-                    None => body_2.centroid().add(pos_2).add(lin_vel_2.unwrap_or(math::Vec2::zero())),
-                };
 
                 // collision detected
                 solved = false;
@@ -650,7 +514,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
 
                 // invalidate cache since it will change with the reaction
                 hitbox_1 = None;
-                swept_shape_1 = None;
+                global_shape_1 = None;
 
                 let (translation_1, translation_2) = world.engine.translation.get2_mut(entity_1, entity_2);
                 let (rotation_1, rotation_2) = world.engine.rotation.get2_mut(entity_1, entity_2);

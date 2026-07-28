@@ -5,6 +5,9 @@ use std::fmt::Write;
 use macroquad::prelude as mq_prelude;
 
 const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
+const TICKS_PER_FRAME: usize = 15;
+const STEP: f32 = 1.0 / (TICKS_PER_FRAME as f32);
+const MAX_COLLISION_ITERATIONS: usize = 10;
 
 // this is an example of how to define a custom component, how to add it to the world, how to access its SparseSet and how to attach it to an entity using the map file
 //
@@ -186,12 +189,16 @@ async fn main() {
 
         if !pause {
             // update world and camera
-            prelude::integrate_all_lin_vel(&mut world);
-            prelude::integrate_all_ang_vel(&mut world);
-            prelude::reset_all_rest(&mut world);
-            prelude::resolve_collisions(&mut world, 10).unwrap();
-            prelude::integrate_all_pos(&mut world);
-            prelude::integrate_all_rot_mat(&mut world);
+            for _ in 0..TICKS_PER_FRAME {
+                prelude::integrate_all_lin_vel(&mut world, STEP);
+                prelude::integrate_all_ang_vel(&mut world, STEP);
+                prelude::reset_all_rest(&mut world);
+                prelude::resolve_collisions(&mut world, MAX_COLLISION_ITERATIONS, STEP).unwrap();
+                prelude::integrate_all_pos(&mut world, STEP);
+                prelude::integrate_all_rot_mat(&mut world, STEP);
+                prelude::set_all_lin_acc(&mut world, GRAVITY);
+                prelude::set_all_ang_acc(&mut world, 0.0);
+            }
 
             camera.update(world.engine().transform.get(player).expect("missing transform").pos());
         }
@@ -200,11 +207,13 @@ async fn main() {
         prelude::render(&mut world, &camera);
 
         // render text
-        mq_prelude::draw_text(
-            &format!("FPS: {}", mq_prelude::get_fps()),
+        let fps = mq_prelude::get_fps();
+        mq_prelude::draw_multiline_text(
+            &format!("FPS: {}\nTPS: {}", fps, fps * TICKS_PER_FRAME as i32),
             mq_prelude::screen_width() - 70.0,
             25.0,
             16.0,
+            None,
             mq_prelude::WHITE,
         );
 

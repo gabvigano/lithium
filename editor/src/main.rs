@@ -10,6 +10,11 @@ use macroquad::{
 
 use std::{fmt::Write, fs, path::Path};
 
+const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
+const TICKS_PER_FRAME: usize = 15;
+const STEP: f32 = 1.0 / (TICKS_PER_FRAME as f32);
+const MAX_COLLISION_ITERATIONS: usize = 10;
+
 fn get_window_config() -> mq_prelude::Conf {
     mq_prelude::Conf {
         window_title: String::from("lithium-editor"),
@@ -22,15 +27,12 @@ fn get_window_config() -> mq_prelude::Conf {
 
 #[macroquad::main(get_window_config())]
 async fn main() {
-    const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.2 };
-
     // initialize environment
     let mut entity_manager = prelude::EntityManager::new();
     let mut world = prelude::World::default();
     let mut simulate = false;
 
     // load assets
-
     fn load_assets(world: &mut prelude::World<0>, entity_manager: &mut prelude::EntityManager) -> Vec<prelude::AssetCache> {
         let assets_path = Path::new("assets");
         let mut hot_reload_caches: Vec<prelude::AssetCache> = Vec::new();
@@ -71,7 +73,8 @@ async fn main() {
 
         // reset force
         if simulate {
-            prelude::set_all_force(&mut world, GRAVITY);
+            prelude::set_all_lin_acc(&mut world, GRAVITY);
+            prelude::set_all_ang_acc(&mut world, 0.0);
         }
 
         // get mouse pos
@@ -146,12 +149,16 @@ async fn main() {
         }
 
         if simulate {
-            prelude::integrate_all_lin_vel(&mut world);
-            prelude::integrate_all_ang_vel(&mut world);
-            prelude::reset_all_rest(&mut world);
-            prelude::resolve_collisions(&mut world, 10).unwrap();
-            prelude::integrate_all_pos(&mut world);
-            prelude::integrate_all_rot_mat(&mut world);
+            for _ in 0..TICKS_PER_FRAME {
+                prelude::integrate_all_lin_vel(&mut world, STEP);
+                prelude::integrate_all_ang_vel(&mut world, STEP);
+                prelude::reset_all_rest(&mut world);
+                prelude::resolve_collisions(&mut world, MAX_COLLISION_ITERATIONS, STEP).unwrap();
+                prelude::integrate_all_pos(&mut world, STEP);
+                prelude::integrate_all_rot_mat(&mut world, STEP);
+                prelude::set_all_lin_acc(&mut world, GRAVITY);
+                prelude::set_all_ang_acc(&mut world, 0.0);
+            }
         }
 
         if let Some(entity) = dragging_entity {
@@ -165,11 +172,13 @@ async fn main() {
         prelude::render(&mut world, &camera);
 
         // render text
-        mq_prelude::draw_text(
-            &format!("FPS: {}", mq_prelude::get_fps()),
+        let fps = mq_prelude::get_fps();
+        mq_prelude::draw_multiline_text(
+            &format!("FPS: {}\nTPS: {}", fps, fps * TICKS_PER_FRAME as i32),
             mq_prelude::screen_width() - 70.0,
             25.0,
             16.0,
+            None,
             mq_prelude::WHITE,
         );
 

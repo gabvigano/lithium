@@ -41,36 +41,36 @@ pub fn set_all_ang_acc<const N: usize>(world: &mut ecs::World<N>, ang_acc: f32) 
 // integration
 
 #[inline]
-pub fn integrate_all_pos<const N: usize>(world: &mut ecs::World<N>) {
+pub fn integrate_all_pos<const N: usize>(world: &mut ecs::World<N>, step: f32) {
     for (entity, transform) in world.engine.transform.iter_mut() {
         if let Some(ecs::Translation { lin_vel, .. }) = world.engine.translation.get(entity) {
-            transform.pos.add_mut(*lin_vel);
+            transform.pos.add_mut(lin_vel.scale(step));
         }
     }
 }
 
 #[inline]
-pub fn integrate_all_rot_mat<const N: usize>(world: &mut ecs::World<N>) {
+pub fn integrate_all_rot_mat<const N: usize>(world: &mut ecs::World<N>, step: f32) {
     for (entity, rot_mat) in world.engine.rotation_matrix.iter_mut() {
         if let Some(ecs::Rotation { ang_vel, .. }) = world.engine.rotation.get(entity)
             && let Some(ecs::Body { centroid, .. }) = world.engine.body.get(entity)
         {
-            _ = rot_mat.update_mut(math::Radians(*ang_vel), rot_mat.rot_mat.pre_mul_vec2(*centroid));
+            _ = rot_mat.update_mut(math::Radians(ang_vel * step), rot_mat.rot_mat.pre_mul_vec2(*centroid));
         }
     }
 }
 
 #[inline]
-pub fn integrate_all_lin_vel<const N: usize>(world: &mut ecs::World<N>) {
+pub fn integrate_all_lin_vel<const N: usize>(world: &mut ecs::World<N>, step: f32) {
     for (_, translation) in world.engine.translation.iter_mut() {
-        translation.lin_vel.add_mut(translation.force.scale(translation.inv_mass()));
+        translation.lin_vel.add_mut(translation.force.scale(translation.inv_mass() * step));
     }
 }
 
 #[inline]
-pub fn integrate_all_ang_vel<const N: usize>(world: &mut ecs::World<N>) {
+pub fn integrate_all_ang_vel<const N: usize>(world: &mut ecs::World<N>, step: f32) {
     for (_, rotation) in world.engine.rotation.iter_mut() {
-        rotation.ang_vel += rotation.torque() * rotation.inv_inertia();
+        rotation.ang_vel += rotation.torque() * rotation.inv_inertia() * step;
     }
 }
 

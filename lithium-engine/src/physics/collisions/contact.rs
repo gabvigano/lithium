@@ -46,6 +46,7 @@ pub fn compute_contact_point(
     body_2: &ecs::Body,
     cave_part_idx_1: usize,
     cave_part_idx_2: usize,
+    step: f32,
 ) -> Result<math::Vec2, base::GeometryError> {
     const FEATURE_MARGIN: f32 = 0.05;
     const PARALLEL_EPS: f32 = 0.02;
@@ -290,24 +291,24 @@ pub fn compute_contact_point(
     }
 
     let global_pos_1 = match lin_vel_1 {
-        Some(v) => pos_1.add(v),
+        Some(v) => pos_1.add(v.scale(step)),
         None => pos_1,
     };
 
     let global_pos_2 = match lin_vel_2 {
-        Some(v) => pos_2.add(v),
+        Some(v) => pos_2.add(v.scale(step)),
         None => pos_2,
     };
 
     let global_rot_mat_1: Option<&ecs::RotationMatrix> = match (rot_mat_1, ang_vel_1) {
-        (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av), rm.rot_mat.pre_mul_vec2(body_1.centroid))),
+        (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body_1.centroid))),
         (Some(rm), None) => Some(rm),
         (None, Some(_)) => panic!("ang_vel exists but there is no rot_mat"),
         (None, None) => None,
     };
 
     let global_rot_mat_2: Option<&ecs::RotationMatrix> = match (rot_mat_2, ang_vel_2) {
-        (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av), rm.rot_mat.pre_mul_vec2(body_2.centroid))),
+        (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body_2.centroid))),
         (Some(rm), None) => Some(rm),
         (None, Some(_)) => panic!("ang_vel exists but there is no rot_mat"),
         (None, None) => None,
