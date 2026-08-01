@@ -5,8 +5,6 @@ use serde::Deserialize;
 
 pub const EPS: f32 = 1e-6;
 pub const EPS_SQR: f32 = EPS * EPS;
-pub const ZERO_VEC2: Vec2 = Vec2::zero();
-pub const IDENTITY_MAT2X3: Mat2x3 = Mat2x3::identity();
 
 #[inline(always)]
 pub fn pow2(x: f32) -> f32 {
@@ -46,19 +44,12 @@ pub struct Vec2 {
 }
 
 impl Vec2 {
+    pub const ZERO: Self = Self { x: 0.0, y: 0.0 };
+    pub const ONE: Self = Self { x: 0.0, y: 0.0 };
+
     #[inline]
-    pub fn new(x: f32, y: f32) -> Self {
+    pub const fn new(x: f32, y: f32) -> Self {
         Self { x, y }
-    }
-
-    #[inline]
-    pub const fn zero() -> Self {
-        Self { x: 0.0, y: 0.0 }
-    }
-
-    #[inline]
-    pub const fn one() -> Self {
-        Self { x: 1.0, y: 1.0 }
     }
 
     #[inline]
@@ -332,8 +323,26 @@ pub struct Mat2x3 {
 }
 
 impl Mat2x3 {
+    pub const ZERO: Self = Self {
+        x: (0.0, 0.0),
+        y: (0.0, 0.0),
+        z: (0.0, 0.0),
+    };
+
+    pub const ONE: Self = Self {
+        x: (1.0, 1.0),
+        y: (1.0, 1.0),
+        z: (1.0, 1.0),
+    };
+
+    pub const IDENTITY: Self = Self {
+        x: (1.0, 0.0),
+        y: (0.0, 1.0),
+        z: (0.0, 0.0),
+    };
+
     #[inline]
-    pub fn new(x: (f32, f32), y: (f32, f32), z: (f32, f32)) -> Self {
+    pub const fn new(x: (f32, f32), y: (f32, f32), z: (f32, f32)) -> Self {
         Self { x: x, y: y, z: z }
     }
 
@@ -346,33 +355,6 @@ impl Mat2x3 {
             (-sin, cos),
             ((1.0 - cos) * pivot.x + sin * pivot.y, (1.0 - cos) * pivot.y - sin * pivot.x),
         )
-    }
-
-    #[inline]
-    pub const fn zero() -> Self {
-        Self {
-            x: (0.0, 0.0),
-            y: (0.0, 0.0),
-            z: (0.0, 0.0),
-        }
-    }
-
-    #[inline]
-    pub const fn one() -> Self {
-        Self {
-            x: (1.0, 1.0),
-            y: (1.0, 1.0),
-            z: (1.0, 1.0),
-        }
-    }
-
-    #[inline]
-    pub const fn identity() -> Self {
-        Self {
-            x: (1.0, 0.0),
-            y: (0.0, 1.0),
-            z: (0.0, 0.0),
-        }
     }
 
     #[inline]
@@ -458,7 +440,7 @@ pub struct Radians(pub f32);
 
 impl Radians {
     #[inline]
-    pub fn new(radians: f32) -> Self {
+    pub const fn new(radians: f32) -> Self {
         Self(radians)
     }
 

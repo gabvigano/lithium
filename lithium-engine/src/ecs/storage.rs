@@ -15,7 +15,7 @@ pub struct SparseSet<T> {
 
 impl<T> SparseSet<T> {
     #[inline]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             components: Vec::new(),
             entities: Vec::new(),

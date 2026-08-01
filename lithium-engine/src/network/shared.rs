@@ -58,7 +58,7 @@ pub struct InputMap<I> {
 
 impl<I: PartialEq> InputMap<I> {
     #[inline]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { inputs: BTreeMap::new() }
     }
 

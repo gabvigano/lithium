@@ -6,7 +6,7 @@ pub struct EntityManager {
 
 impl EntityManager {
     #[inline]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { next_id: 0 }
     }
 

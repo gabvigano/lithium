@@ -58,7 +58,7 @@ pub struct EngineComponents {
 
 impl EngineComponents {
     #[inline]
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             transform: ecs::SparseSet::new(),
             rotation_matrix: ecs::SparseSet::new(),
@@ -84,7 +84,7 @@ impl UserComponents<0> {
 
 impl<const N: usize> UserComponents<N> {
     #[inline]
-    pub fn new(items: [Box<dyn ecs::ErasedStorage>; N]) -> Self {
+    pub const fn new(items: [Box<dyn ecs::ErasedStorage>; N]) -> Self {
         Self { items }
     }
 

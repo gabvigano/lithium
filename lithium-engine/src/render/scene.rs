@@ -7,9 +7,9 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn new(rel_pos: math::Vec2, screen_size: math::Rect) -> Self {
+    pub const fn new(rel_pos: math::Vec2, screen_size: math::Rect) -> Self {
         Camera {
-            pos: math::Vec2 { x: 0.0, y: 0.0 },
+            pos: math::Vec2::ZERO,
             rel_pos: rel_pos,
             screen_size: screen_size,
         }

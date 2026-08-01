@@ -43,7 +43,7 @@ pub(crate) fn compute_reaction(
             if let Some(translation_1) = translation_1.as_deref() {
                 (translation_1.lin_vel, translation_1.inv_mass())
             } else {
-                (math::ZERO_VEC2, 0.0)
+                (math::Vec2::ZERO, 0.0)
             }
         };
 
@@ -51,7 +51,7 @@ pub(crate) fn compute_reaction(
             if let Some(translation_2) = translation_2.as_deref() {
                 (translation_2.lin_vel, translation_2.inv_mass())
             } else {
-                (math::ZERO_VEC2, 0.0)
+                (math::Vec2::ZERO, 0.0)
             }
         };
 
@@ -164,7 +164,7 @@ pub(crate) fn compute_reaction(
             // recompute lin_vel_1
             translation_1.lin_vel
         } else {
-            math::ZERO_VEC2
+            math::Vec2::ZERO
         };
 
         let lin_vel_2 = if let Some(translation_2) = translation_2.as_deref_mut() {
@@ -183,7 +183,7 @@ pub(crate) fn compute_reaction(
             // recompute lin_vel_2
             translation_2.lin_vel
         } else {
-            math::ZERO_VEC2
+            math::Vec2::ZERO
         };
 
         // and for rotation:

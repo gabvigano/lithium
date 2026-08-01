@@ -303,14 +303,14 @@ pub fn compute_contact_point(
     let global_rot_mat_1: Option<&ecs::RotationMatrix> = match (rot_mat_1, ang_vel_1) {
         (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body_1.centroid))),
         (Some(rm), None) => Some(rm),
-        (None, Some(_)) => panic!("ang_vel exists but there is no rot_mat"),
+        (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"),
         (None, None) => None,
     };
 
     let global_rot_mat_2: Option<&ecs::RotationMatrix> = match (rot_mat_2, ang_vel_2) {
         (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body_2.centroid))),
         (Some(rm), None) => Some(rm),
-        (None, Some(_)) => panic!("ang_vel exists but there is no rot_mat"),
+        (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"),
         (None, None) => None,
     };
 

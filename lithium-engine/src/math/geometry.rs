@@ -15,7 +15,7 @@ pub struct HitBox {
 
 impl HitBox {
     #[inline]
-    pub fn new(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
+    pub const fn new(min_x: f32, min_y: f32, max_x: f32, max_y: f32) -> Self {
         Self {
             min_x,
             min_y,
@@ -454,7 +454,7 @@ pub struct Segment {
 
 impl Segment {
     #[inline]
-    pub fn new(a: math::Vec2, b: math::Vec2) -> Result<Self, base::GeometryError> {
+    pub fn new_checked(a: math::Vec2, b: math::Vec2) -> Result<Self, base::GeometryError> {
         let segment = Self { a, b };
 
         segment.validate(true)?;
@@ -463,7 +463,7 @@ impl Segment {
     }
 
     #[inline]
-    pub fn new_unchecked(a: math::Vec2, b: math::Vec2) -> Self {
+    pub const fn new_unchecked(a: math::Vec2, b: math::Vec2) -> Self {
         Self { a, b }
     }
 
@@ -651,7 +651,7 @@ impl ApplyTransformationVerts for Segment {
 impl ApplyTransformationShape for Segment {
     #[inline]
     fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
-        Self::new(self.a.add(vec), self.b.add(vec))
+        Self::new_checked(self.a.add(vec), self.b.add(vec))
     }
 
     #[inline]
@@ -661,7 +661,7 @@ impl ApplyTransformationShape for Segment {
 
     #[inline]
     fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
+        Self::new_checked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b))
     }
 
     #[inline]
@@ -671,7 +671,7 @@ impl ApplyTransformationShape for Segment {
 
     #[inline]
     fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(mat.pre_mul_vec2(self.a).add(vec), mat.pre_mul_vec2(self.b).add(vec))
+        Self::new_checked(mat.pre_mul_vec2(self.a).add(vec), mat.pre_mul_vec2(self.b).add(vec))
     }
 
     #[inline]
@@ -696,7 +696,7 @@ pub struct Triangle {
 
 impl Triangle {
     #[inline]
-    pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Result<Self, base::GeometryError> {
+    pub fn new_checked(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Result<Self, base::GeometryError> {
         let triangle = Self { a, b, c };
 
         triangle.validate(true)?;
@@ -705,7 +705,7 @@ impl Triangle {
     }
 
     #[inline]
-    pub fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Self {
+    pub const fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2) -> Self {
         Self { a, b, c }
     }
 
@@ -899,7 +899,7 @@ impl ApplyTransformationVerts for Triangle {
 impl ApplyTransformationShape for Triangle {
     #[inline]
     fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
-        Self::new(self.a.add(vec), self.b.add(vec), self.c.add(vec))
+        Self::new_checked(self.a.add(vec), self.b.add(vec), self.c.add(vec))
     }
 
     #[inline]
@@ -909,7 +909,7 @@ impl ApplyTransformationShape for Triangle {
 
     #[inline]
     fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c))
+        Self::new_checked(mat.pre_mul_vec2(self.a), mat.pre_mul_vec2(self.b), mat.pre_mul_vec2(self.c))
     }
 
     #[inline]
@@ -919,7 +919,7 @@ impl ApplyTransformationShape for Triangle {
 
     #[inline]
     fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(
+        Self::new_checked(
             mat.pre_mul_vec2(self.a).add(vec),
             mat.pre_mul_vec2(self.b).add(vec),
             mat.pre_mul_vec2(self.c).add(vec),
@@ -950,7 +950,7 @@ pub struct Rect {
 
 impl Rect {
     #[inline]
-    pub fn new(width: f32, height: f32) -> Result<Self, base::MathError> {
+    pub fn new_checked(width: f32, height: f32) -> Result<Self, base::MathError> {
         let rect = Self { width, height };
 
         rect.validate()?;
@@ -1016,7 +1016,7 @@ pub struct Quad {
 
 impl Quad {
     #[inline]
-    pub fn new(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Result<Self, base::GeometryError> {
+    pub fn new_checked(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Result<Self, base::GeometryError> {
         let quad = Self { a, b, c, d };
 
         quad.validate(true)?;
@@ -1025,7 +1025,7 @@ impl Quad {
     }
 
     #[inline]
-    pub fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Self {
+    pub const fn new_unchecked(a: math::Vec2, b: math::Vec2, c: math::Vec2, d: math::Vec2) -> Self {
         Self { a, b, c, d }
     }
 
@@ -1244,7 +1244,7 @@ impl ApplyTransformationVerts for Quad {
 impl ApplyTransformationShape for Quad {
     #[inline]
     fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
-        Self::new(self.a.add(vec), self.b.add(vec), self.c.add(vec), self.d.add(vec))
+        Self::new_checked(self.a.add(vec), self.b.add(vec), self.c.add(vec), self.d.add(vec))
     }
 
     #[inline]
@@ -1254,7 +1254,7 @@ impl ApplyTransformationShape for Quad {
 
     #[inline]
     fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(
+        Self::new_checked(
             mat.pre_mul_vec2(self.a),
             mat.pre_mul_vec2(self.b),
             mat.pre_mul_vec2(self.c),
@@ -1274,7 +1274,7 @@ impl ApplyTransformationShape for Quad {
 
     #[inline]
     fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(
+        Self::new_checked(
             mat.pre_mul_vec2(self.a).add(vec),
             mat.pre_mul_vec2(self.b).add(vec),
             mat.pre_mul_vec2(self.c).add(vec),
@@ -1308,7 +1308,7 @@ pub struct CvxPoly {
 
 impl CvxPoly {
     #[inline]
-    pub fn new(verts: Vec<math::Vec2>, warnings: bool) -> Result<Self, base::GeometryError> {
+    pub fn new_checked(verts: Vec<math::Vec2>, warnings: bool) -> Result<Self, base::GeometryError> {
         let cvx_poly = Self { verts };
 
         cvx_poly.validate(warnings)?;
@@ -1317,7 +1317,7 @@ impl CvxPoly {
     }
 
     #[inline]
-    pub fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
+    pub const fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
         Self { verts }
     }
 
@@ -1395,7 +1395,7 @@ impl Validate for CvxPoly {
 impl Centroid for CvxPoly {
     #[inline]
     fn centroid(&self) -> math::Vec2 {
-        let mut sum = math::ZERO_VEC2;
+        let mut sum = math::Vec2::ZERO;
         for vert in &self.verts {
             sum.add_mut(*vert);
         }
@@ -1535,7 +1535,7 @@ impl ApplyTransformationVerts for CvxPoly {
 impl ApplyTransformationShape for CvxPoly {
     #[inline]
     fn apply_vec2_checked(&self, vec: math::Vec2) -> Result<Self, base::GeometryError> {
-        Self::new(self.verts().into_iter().map(|v| vec.add(*v)).collect(), true)
+        Self::new_checked(self.verts().into_iter().map(|v| vec.add(*v)).collect(), true)
     }
 
     #[inline]
@@ -1545,7 +1545,7 @@ impl ApplyTransformationShape for CvxPoly {
 
     #[inline]
     fn apply_mat2x3_checked(&self, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect(), true)
+        Self::new_checked(self.verts.iter().map(|v| mat.pre_mul_vec2(*v)).collect(), true)
     }
 
     #[inline]
@@ -1555,7 +1555,7 @@ impl ApplyTransformationShape for CvxPoly {
 
     #[inline]
     fn apply_mat2x3_then_vec2_checked(&self, vec: math::Vec2, mat: &math::Mat2x3) -> Result<Self, base::GeometryError> {
-        Self::new(self.verts.iter().map(|v| mat.pre_mul_vec2(*v).add(vec)).collect(), true)
+        Self::new_checked(self.verts.iter().map(|v| mat.pre_mul_vec2(*v).add(vec)).collect(), true)
     }
 
     #[inline]
@@ -1585,7 +1585,7 @@ struct CaveCache {
 
 impl CaveCache {
     #[inline]
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             triangles: OnceCell::new(),
             cvx_polys: OnceCell::new(),
@@ -1671,7 +1671,7 @@ pub struct CavePoly {
 
 impl CavePoly {
     #[inline]
-    pub fn new(verts: Vec<math::Vec2>, warnings: bool) -> Result<Self, base::GeometryError> {
+    pub fn new_checked(verts: Vec<math::Vec2>, warnings: bool) -> Result<Self, base::GeometryError> {
         let cave_poly = Self {
             verts,
             cache: CaveCache::new(),
@@ -1683,7 +1683,7 @@ impl CavePoly {
     }
 
     #[inline]
-    pub fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
+    pub const fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
         Self {
             verts,
             cache: CaveCache::new(),
@@ -1697,7 +1697,7 @@ impl CavePoly {
 
     #[inline]
     pub fn set_verts(&mut self, new_verts: Vec<math::Vec2>, warnings: bool) -> Result<(), base::GeometryError> {
-        let new_poly = Self::new(new_verts, warnings)?;
+        let new_poly = Self::new_checked(new_verts, warnings)?;
 
         self.verts = new_poly.verts;
         self.cache = CaveCache::new();
@@ -1777,7 +1777,7 @@ impl CavePoly {
                 let v2 = verts[i2];
 
                 // check if the triangle will be valid
-                let Ok(triangle) = math::Triangle::new(v0, v1, v2) else {
+                let Ok(triangle) = math::Triangle::new_checked(v0, v1, v2) else {
                     // triangle is not valid
                     continue 'loop_1;
                 };
@@ -1810,7 +1810,7 @@ impl CavePoly {
             return Err(base::GeometryError::TooFewVertices(verts.len()));
         }
 
-        triangles.push(math::Triangle::new(verts[0], verts[1], verts[2])?);
+        triangles.push(math::Triangle::new_checked(verts[0], verts[1], verts[2])?);
 
         Ok(triangles)
     }
@@ -2059,7 +2059,7 @@ impl Validate for CavePoly {
 impl Centroid for CavePoly {
     #[inline]
     fn centroid(&self) -> math::Vec2 {
-        let mut sum = math::ZERO_VEC2;
+        let mut sum = math::Vec2::ZERO;
         for vert in &self.verts {
             sum.add_mut(*vert);
         }
@@ -2296,7 +2296,7 @@ pub struct Circle {
 
 impl Circle {
     #[inline]
-    pub fn new(radius: f32) -> Result<Self, base::MathError> {
+    pub fn new_checked(radius: f32) -> Result<Self, base::MathError> {
         let circle = Self { radius };
 
         circle.validate()?;

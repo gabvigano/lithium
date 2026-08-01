@@ -23,7 +23,7 @@ pub struct Transform {
 
 impl Transform {
     #[inline]
-    pub fn new(pos: math::Vec2) -> Self {
+    pub const fn new(pos: math::Vec2) -> Self {
         Self { pos }
     }
 
@@ -73,28 +73,28 @@ pub struct RotationMatrix {
 
 impl RotationMatrix {
     #[inline]
-    pub fn new(rot_mat: math::Mat2x3) -> Self {
+    pub const fn new(rot_mat: math::Mat2x3) -> Self {
         Self { rot_mat }
     }
 
     #[inline]
     pub const fn zero() -> Self {
         Self {
-            rot_mat: math::Mat2x3::zero(),
+            rot_mat: math::Mat2x3::ZERO,
         }
     }
 
     #[inline]
     pub const fn one() -> Self {
         Self {
-            rot_mat: math::Mat2x3::one(),
+            rot_mat: math::Mat2x3::ONE,
         }
     }
 
     #[inline]
     pub const fn identity() -> Self {
         Self {
-            rot_mat: math::Mat2x3::identity(),
+            rot_mat: math::Mat2x3::IDENTITY,
         }
     }
 
@@ -163,7 +163,7 @@ pub struct Translation {
 
 impl Translation {
     #[inline]
-    pub fn new(lin_vel: math::Vec2, force: math::Vec2, mass: f32) -> Result<Self, base::MathError> {
+    pub const fn new(lin_vel: math::Vec2, force: math::Vec2, mass: f32) -> Result<Self, base::MathError> {
         if mass <= 0.0 {
             return Err(base::MathError::NonPositive("mass"));
         }
@@ -293,7 +293,7 @@ pub struct Rotation {
 
 impl Rotation {
     #[inline]
-    pub fn new(ang_vel: f32, torque: f32, inertia: f32) -> Result<Self, base::MathError> {
+    pub const fn new(ang_vel: f32, torque: f32, inertia: f32) -> Result<Self, base::MathError> {
         if inertia <= 0.0 {
             return Err(base::MathError::NonPositive("inertia"));
         }
@@ -387,7 +387,7 @@ pub struct Surface {
 
 impl Surface {
     #[inline]
-    pub fn new(elast: f32, static_friction: f32, kinetic_friction: f32) -> Self {
+    pub const fn new(elast: f32, static_friction: f32, kinetic_friction: f32) -> Self {
         Self {
             elast,
             static_friction,
@@ -505,7 +505,7 @@ pub struct Material {
 
 impl Material {
     #[inline]
-    pub fn new(color: math::Color, layer: usize, show: bool) -> Self {
+    pub const fn new(color: math::Color, layer: usize, show: bool) -> Self {
         Self { color, layer, show }
     }
 

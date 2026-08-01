@@ -1,4 +1,4 @@
-use crate::math::{ApplyTransformationShape, ApplyTransformationVerts, Centroid, SatCompatible};
+use crate::math::{ApplyTransformationShape, Centroid, SatCompatible, ToHitBox};
 use crate::{base, ecs, math, physics};
 
 use std::mem;
@@ -52,18 +52,18 @@ where
         Some(())
     }
 
-    // vector of sides
-    let mut sides: Vec<math::Vec2> = Vec::with_capacity(geometry_1.sides_number() + geometry_2.sides_number());
-    geometry_1.append_sides(&mut sides);
-
     // compute centroids
     let centroid_1 = geometry_1.centroid();
     let centroid_2 = geometry_2.centroid();
     let delta = centroid_2.sub(centroid_1); // points from geometry_1 to geometry_2
 
-    // initialize normal data
+    // initialize return data
     let mut best_overlap = f32::INFINITY;
-    let mut best_normal = math::ZERO_VEC2; // minimum translation vector axis, the axis of the smallest vector to push one shape out of the other
+    let mut best_normal = math::Vec2::ZERO; // minimum translation vector axis, the axis of the smallest vector to push one shape out of the other
+
+    // vector of sides
+    let mut sides: Vec<math::Vec2> = Vec::with_capacity(geometry_1.sides_number() + geometry_2.sides_number());
+    geometry_1.append_sides(&mut sides);
 
     check_axes(&sides, geometry_1, geometry_2, delta, &mut best_overlap, &mut best_normal)?;
 
@@ -96,7 +96,7 @@ where
         V: SatCompatible + Centroid,
     {
         let mut best_overlap = f32::INFINITY;
-        let mut best_normal = math::ZERO_VEC2;
+        let mut best_normal = math::Vec2::ZERO;
         let mut cave_part_idx = 0;
         let mut collided = false;
 
@@ -143,7 +143,7 @@ where
         }),
         (Some(cvx_polys_1), Some(cvx_polys_2)) => {
             let mut best_overlap = f32::INFINITY;
-            let mut best_normal = math::ZERO_VEC2;
+            let mut best_normal = math::Vec2::ZERO;
             let mut cave_part_idx_1 = 0;
             let mut cave_part_idx_2 = 0;
             let mut collided = false;
@@ -178,71 +178,6 @@ where
     })
 }
 
-pub fn compute_hitbox(
-    state: State,
-    mut pos: math::Vec2,
-    rot_mat: Option<&ecs::RotationMatrix>,
-    lin_vel: Option<math::Vec2>,
-    ang_vel: Option<f32>,
-    body: &ecs::Body,
-    step: f32,
-) -> math::HitBox {
-    let rot_mat_2 = if !matches!(state, State::Static | State::Still) {
-        pos = match lin_vel {
-            Some(lv) => pos.add(lv.scale(step)),
-            None => pos,
-        };
-
-        match (rot_mat, ang_vel) {
-            (Some(rm), Some(av)) => Some(rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body.centroid))),
-            (Some(_), None) | (None, None) => None,
-            (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"), // <- thanks Lyla for fixing the error message
-        }
-    } else {
-        None
-    };
-
-    let rot_mat = rot_mat_2.as_ref().or(rot_mat);
-
-    fn compute_hitbox_poly<P>(poly: &P, pos: math::Vec2, rot_mat: Option<&ecs::RotationMatrix>) -> math::HitBox
-    where
-        P: ApplyTransformationVerts<Output = Vec<math::Vec2>, OutputStep = Vec<math::Vec2>>,
-    {
-        let verts = match rot_mat {
-            Some(ecs::RotationMatrix { rot_mat: rm }) => &poly.apply_mat2x3_then_vec2(pos, rm),
-            None => &poly.apply_vec2(pos),
-        };
-        math::HitBox::from_verts_slice(verts)
-    }
-
-    match &body.shape {
-        math::Shape::Segment(segment) => {
-            let verts = match rot_mat {
-                Some(ecs::RotationMatrix { rot_mat: rm }) => &segment.apply_mat2x3_then_vec2(pos, rm),
-                None => &segment.apply_vec2(pos),
-            };
-            math::HitBox::from_verts_array(verts)
-        }
-        math::Shape::Triangle(triangle) => {
-            let verts = match rot_mat {
-                Some(ecs::RotationMatrix { rot_mat: rm }) => &triangle.apply_mat2x3_then_vec2(pos, rm),
-                None => &triangle.apply_vec2(pos),
-            };
-            math::HitBox::from_verts_array(verts)
-        }
-        math::Shape::Quad(quad) => {
-            let verts = match rot_mat {
-                Some(ecs::RotationMatrix { rot_mat: rm }) => &quad.apply_mat2x3_then_vec2(pos, rm),
-                None => &quad.apply_vec2(pos),
-            };
-            math::HitBox::from_verts_array(verts)
-        }
-        math::Shape::CvxPoly(cvx_poly) => compute_hitbox_poly(cvx_poly, pos, rot_mat),
-        math::Shape::CavePoly(cave_poly) => compute_hitbox_poly(cave_poly, pos, rot_mat),
-        math::Shape::Circle(_) => unimplemented!(),
-    }
-}
-
 pub fn compute_global_shape(
     state: State,
     mut pos: math::Vec2,
@@ -252,22 +187,21 @@ pub fn compute_global_shape(
     body: &ecs::Body,
     step: f32,
 ) -> math::Shape {
-    let rot_mat_2 = if !matches!(state, State::Static | State::Still) {
+    let rot_mat = if matches!(state, State::Static | State::Still) {
+        None
+    } else {
         pos = match lin_vel {
             Some(lv) => pos.add(lv.scale(step)),
             None => pos,
         };
 
         match (rot_mat, ang_vel) {
-            (Some(rm), Some(av)) => Some(rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body.centroid))),
-            (Some(_), None) | (None, None) => None,
+            (Some(rm), Some(av)) => Some(&rm.update(math::Radians(av * step), rm.rot_mat.pre_mul_vec2(body.centroid))),
+            (Some(rm), None) => Some(rm),
             (None, Some(_)) => panic!("ang_vel exists but rot_mat does not"), // <- thanks Lyla for fixing the error message
+            (None, None) => None,
         }
-    } else {
-        None
     };
-
-    let rot_mat = rot_mat_2.as_ref().or(rot_mat);
 
     match rot_mat {
         Some(ecs::RotationMatrix { rot_mat: rm }) => body.shape.apply_mat2x3_then_vec2_unchecked(pos, rm),
@@ -338,7 +272,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
         ) {
             // entity is a valid object
             states.push(get_state(world, entity));
-            // println!("entity {entity} marked as {:?}", states.last());
+            // println!("entity {entity} marked as {:?}", states.last().unwrap());
         } else {
             // entity is not a valid object
             states.push(State::Invalid);
@@ -353,10 +287,10 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
             mem::swap(&mut states, &mut next_states);
             next_states.fill(State::Invalid);
 
-            // keep far state for object that are already far
+            // preserve far state for objects that are already far
             for idx in 0..len {
                 if matches!(states[idx], State::Far) {
-                    next_states[idx] = State::Far
+                    next_states[idx] = State::Far;
                 }
             }
         }
@@ -400,10 +334,9 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                 continue 'loop_1;
             };
 
-            // initialize hitbox, global shape and mass center cache
-            let mut hitbox_1 = Some(compute_hitbox(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1, step));
-            let mut global_shape_1: Option<math::Shape> = None;
-            let mut mass_center_1 = math::ZERO_VEC2;
+            // initialize global shape and hitbox cache
+            let mut global_shape_1 = None;
+            let mut hitbox_1 = None;
 
             'loop_2: for idx_2 in 0..len {
                 let state_2 = states[idx_2];
@@ -449,13 +382,20 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                     continue 'loop_2;
                 };
 
-                // broad phase
-                if hitbox_1.is_none() {
-                    // println!("recomputing hitbox_1 cache");
-                    hitbox_1 = Some(compute_hitbox(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1, step));
+                // compute global shapes
+                if global_shape_1.is_none() {
+                    // println!("recomputing global_shape_1 cache");
+                    global_shape_1 = Some(compute_global_shape(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1, step));
                 }
 
-                let hitbox_2 = compute_hitbox(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2, step);
+                let global_shape_2 = compute_global_shape(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2, step);
+
+                // broad phase, compute hitbox
+                if hitbox_1.is_none() {
+                    // println!("recomputing hitbox_1 cache");
+                    hitbox_1 = Some(global_shape_1.as_ref().unwrap().to_hitbox());
+                }
+                let hitbox_2 = global_shape_2.to_hitbox();
 
                 // println!("{entity_1}-{entity_2} checking hitboxes...");
                 if !check_hitboxes(hitbox_1.as_ref().unwrap(), &hitbox_2) {
@@ -465,17 +405,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                 }
                 // println!("  -> hitboxes ARE colliding");
 
-                // hitboxes are colliding, compute global shapes
-                if global_shape_1.is_none() {
-                    // println!("recomputing global_shape_1 cache");
-                    let global_shape = compute_global_shape(state_1, pos_1, rot_mat_1, lin_vel_1, ang_vel_1, body_1, step);
-                    mass_center_1 = global_shape.centroid();
-                    global_shape_1 = Some(global_shape);
-                }
-
-                let global_shape_2 = compute_global_shape(state_2, pos_2, rot_mat_2, lin_vel_2, ang_vel_2, body_2, step);
-                let mass_center_2 = global_shape_2.centroid();
-
+                // narrow phase
                 // println!("{entity_1}-{entity_2} checking global shapes...");
                 let Some(SatCollision {
                     overlap: _,
@@ -490,7 +420,10 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
                 };
                 // println!("  -> global shapes ARE colliding");
 
-                // compute contact point and centers of mass
+                // compute centers of mass and contact point
+                let mass_center_1 = global_shape_1.as_ref().unwrap().centroid();
+                let mass_center_2 = global_shape_2.centroid();
+
                 let contact_point = physics::compute_contact_point(
                     normal,
                     pos_1,
@@ -549,7 +482,7 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
             // handle far state for entity_1
             if !matches!(next_states[idx_1], State::Active) && entity_1_is_far {
                 // if it is active, it means it was in a collision as entity_2, so it can't be far
-                next_states[idx_1] = State::Far
+                next_states[idx_1] = State::Far;
             }
         }
 

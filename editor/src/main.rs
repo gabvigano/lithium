@@ -52,12 +52,15 @@ async fn main() {
 
     // create camera
     let (screen_width, screen_height) = (mq_prelude::screen_width(), mq_prelude::screen_height());
-    let mut camera = prelude::Camera::new(prelude::Vec2::zero(), prelude::Rect::new(screen_width, screen_height).unwrap());
+    let mut camera = prelude::Camera::new(
+        prelude::Vec2::ZERO,
+        prelude::Rect::new_checked(screen_width, screen_height).unwrap(),
+    );
     *camera.pos_mut() = prelude::Vec2::new(-screen_width / 2.0, -screen_height / 2.0);
 
     // create mouse pointer
-    let mut pointer_pos = prelude::Vec2::zero();
-    let mut pointer_rel_pos = prelude::Vec2::zero();
+    let mut pointer_pos = prelude::Vec2::ZERO;
+    let mut pointer_rel_pos = prelude::Vec2::ZERO;
     let mut dragging_entity = None;
 
     loop {
@@ -164,7 +167,7 @@ async fn main() {
         if let Some(entity) = dragging_entity {
             *world.engine_mut().transform.get_mut(entity).unwrap().pos_mut() = pointer_pos.add(pointer_rel_pos);
             if let Some(translation) = world.engine_mut().translation.get_mut(entity) {
-                *translation.lin_vel_mut() = prelude::Vec2::zero();
+                *translation.lin_vel_mut() = prelude::Vec2::ZERO;
             }
         }
 

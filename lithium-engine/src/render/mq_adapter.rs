@@ -43,7 +43,7 @@ pub fn render<const N: usize>(world: &ecs::World<N>, camera: &render::Camera) {
             let rot_mat = world.engine.rotation_matrix.get(entity);
             let rot_mat_is_none = rot_mat.is_none();
             let rot_mat = if rot_mat_is_none {
-                &math::IDENTITY_MAT2X3
+                &math::Mat2x3::IDENTITY
             } else {
                 &rot_mat.unwrap().rot_mat
             };

@@ -132,7 +132,7 @@ async fn main() {
     // create camera
     let mut camera = prelude::Camera::new(
         prelude::Vec2::new(0.0, -100.0),
-        prelude::Rect::new(mq_prelude::screen_width(), mq_prelude::screen_height()).expect("error creating camera"),
+        prelude::Rect::new_checked(mq_prelude::screen_width(), mq_prelude::screen_height()).expect("error creating camera"),
     );
 
     let mut frame_idx = 1;
