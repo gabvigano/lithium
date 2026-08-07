@@ -12,8 +12,25 @@ pub fn check_hitboxes(hitbox_1: &math::HitBox, hitbox_2: &math::HitBox) -> bool 
         || hitbox_2.min_y > hitbox_1.max_y + math::EPS)
 }
 
+pub struct CvxCollision {
+    // pub overlap: f32,
+    pub normal: math::Vec2, // points from geometry_1 to geometry_2
+}
+
+pub struct CaveCollision {
+    // pub overlap: f32,
+    pub normal: math::Vec2, // points from geometry_1 to geometry_2
+    pub cave_part_idx_1: usize,
+    pub cave_part_idx_2: usize,
+}
+
+pub enum SatCollision {
+    Cvx(CvxCollision),
+    Cave(Vec<CaveCollision>),
+}
+
 /// checks if 2 convex geometries are colliding using SAT algorithm, returns the contact overlap and normal
-fn check_sat_cvx<T, U>(geometry_1: &T, geometry_2: &U) -> Option<(f32, math::Vec2)>
+fn check_sat_cvx<T, U>(geometry_1: &T, geometry_2: &U) -> Option<CvxCollision>
 where
     T: SatCompatible + Centroid,
     U: SatCompatible + Centroid,
@@ -72,14 +89,10 @@ where
 
     check_axes(&sides, geometry_1, geometry_2, delta, &mut best_overlap, &mut best_normal)?;
 
-    Some((best_overlap, best_normal))
-}
-
-pub struct SatCollision {
-    pub overlap: f32,
-    pub normal: math::Vec2,     // points from geometry_1 to geometry_2
-    pub cave_part_idx_1: usize, // only used for CavePoly
-    pub cave_part_idx_2: usize, // only used for CavePoly
+    Some(CvxCollision {
+        // overlap: best_overlap,
+        normal: best_normal,
+    })
 }
 
 /// checks if 2 geometries are colliding using SAT algorithm with check_sat_cvx()
@@ -91,88 +104,66 @@ where
     let cave_parts_1 = geometry_1.split_cave()?;
     let cave_parts_2 = geometry_2.split_cave()?;
 
-    fn test_against_cave<V>(cvx_geometry: &V, cave_parts: &[math::CvxPoly]) -> Option<(f32, math::Vec2, usize)>
+    fn test_against_cave<V>(cvx_geometry: &V, cave_parts: &[math::CvxPoly]) -> Option<Vec<(CvxCollision, usize)>>
     where
         V: SatCompatible + Centroid,
     {
-        let mut best_overlap = f32::INFINITY;
-        let mut best_normal = math::Vec2::ZERO;
-        let mut cave_part_idx = 0;
-        let mut collided = false;
+        let mut collisions = Vec::with_capacity(cave_parts.len());
 
         for (idx, cvx_poly) in cave_parts.iter().enumerate() {
-            let Some((overlap, normal)) = check_sat_cvx(cvx_geometry, cvx_poly) else {
-                continue;
+            if let Some(cvx_collision) = check_sat_cvx(cvx_geometry, cvx_poly) {
+                collisions.push((cvx_collision, idx));
             };
-
-            if overlap < best_overlap {
-                best_overlap = overlap;
-                best_normal = normal;
-                cave_part_idx = idx;
-                collided = true;
-            }
         }
 
-        if collided {
-            Some((best_overlap, best_normal, cave_part_idx))
-        } else {
-            None
-        }
+        if collisions.is_empty() { None } else { Some(collisions) }
     }
 
-    // todo: here, for CavePoly we should only take results from sat if the edge tested is external in the original CavePoly
-
     Ok(match (cave_parts_1, cave_parts_2) {
-        (None, None) => check_sat_cvx(geometry_1, geometry_2).map(|(overlap, normal)| SatCollision {
-            overlap,
-            normal,
-            cave_part_idx_1: 0,
-            cave_part_idx_2: 0,
+        (None, None) => check_sat_cvx(geometry_1, geometry_2).map(SatCollision::Cvx),
+        (None, Some(cave_parts)) => test_against_cave(geometry_1, cave_parts).map(|collisions| {
+            SatCollision::Cave(
+                collisions
+                    .into_iter()
+                    .map(|(CvxCollision { normal }, cave_part_idx)| CaveCollision {
+                        normal,
+                        cave_part_idx_1: 0,
+                        cave_part_idx_2: cave_part_idx,
+                    })
+                    .collect(),
+            )
         }),
-        (None, Some(cvx_polys)) => test_against_cave(geometry_1, cvx_polys).map(|(overlap, normal, cave_part_idx)| SatCollision {
-            overlap,
-            normal,
-            cave_part_idx_1: 0,
-            cave_part_idx_2: cave_part_idx,
+        (Some(cave_parts), None) => test_against_cave(geometry_2, cave_parts).map(|collisions| {
+            SatCollision::Cave(
+                collisions
+                    .into_iter()
+                    .map(|(CvxCollision { normal }, cave_part_idx)| CaveCollision {
+                        normal: normal.rev(),
+                        cave_part_idx_1: cave_part_idx,
+                        cave_part_idx_2: 0,
+                    })
+                    .collect(),
+            )
         }),
-        (Some(cvx_polys), None) => test_against_cave(geometry_2, cvx_polys).map(|(overlap, normal, cave_part_idx)| SatCollision {
-            overlap,
-            normal: normal.rev(),
-            cave_part_idx_1: cave_part_idx,
-            cave_part_idx_2: 0,
-        }),
-        (Some(cvx_polys_1), Some(cvx_polys_2)) => {
-            let mut best_overlap = f32::INFINITY;
-            let mut best_normal = math::Vec2::ZERO;
-            let mut cave_part_idx_1 = 0;
-            let mut cave_part_idx_2 = 0;
-            let mut collided = false;
+        (Some(cave_parts_1), Some(cave_parts_2)) => {
+            let mut collisions = Vec::new();
 
-            for (idx_1, cvx_poly_1) in cvx_polys_1.iter().enumerate() {
-                for (idx_2, cvx_poly_2) in cvx_polys_2.iter().enumerate() {
-                    let Some((overlap, normal)) = check_sat_cvx(cvx_poly_1, cvx_poly_2) else {
-                        continue;
+            for (idx_1, cvx_poly_1) in cave_parts_1.iter().enumerate() {
+                for (idx_2, cvx_poly_2) in cave_parts_2.iter().enumerate() {
+                    if let Some(CvxCollision { normal }) = check_sat_cvx(cvx_poly_1, cvx_poly_2) {
+                        collisions.push(CaveCollision {
+                            normal,
+                            cave_part_idx_1: idx_1,
+                            cave_part_idx_2: idx_2,
+                        });
                     };
-
-                    if overlap < best_overlap {
-                        best_overlap = overlap;
-                        best_normal = normal;
-                        cave_part_idx_1 = idx_1;
-                        cave_part_idx_2 = idx_2;
-                        collided = true;
-                    }
                 }
             }
 
-            if collided {
-                Some(SatCollision {
-                    overlap: best_overlap,
-                    normal: best_normal,
-                    cave_part_idx_1,
-                    cave_part_idx_2,
-                })
-            } else {
+            if collisions.is_empty() {
                 None
+            } else {
+                Some(SatCollision::Cave(collisions))
             }
         }
     })
@@ -407,64 +398,78 @@ pub fn resolve_collisions<const N: usize>(world: &mut ecs::World<N>, iters: usiz
 
                 // narrow phase
                 // println!("{entity_1}-{entity_2} checking global shapes...");
-                let Some(SatCollision {
-                    overlap: _,
-                    normal,
-                    cave_part_idx_1,
-                    cave_part_idx_2,
-                }) = check_sat(global_shape_1.as_ref().unwrap(), &global_shape_2)?
-                else {
+                let Some(sat_collision) = check_sat(global_shape_1.as_ref().unwrap(), &global_shape_2)? else {
                     // global shapes are not colliding, no need to compute reaction or invalidate cache
                     // println!("  -> global shapes NOT colliding");
                     continue 'loop_2;
                 };
                 // println!("  -> global shapes ARE colliding");
 
-                // compute centers of mass and contact point
-                let mass_center_1 = global_shape_1.as_ref().unwrap().centroid();
-                let mass_center_2 = global_shape_2.centroid();
-
-                let contact_point = physics::compute_contact_point(
-                    normal,
-                    pos_1,
-                    pos_2,
-                    rot_mat_1,
-                    rot_mat_2,
-                    lin_vel_1,
-                    lin_vel_2,
-                    ang_vel_1,
-                    ang_vel_2,
-                    body_1,
-                    body_2,
-                    cave_part_idx_1,
-                    cave_part_idx_2,
-                    step,
-                )?;
-
                 // collision detected
                 solved = false;
                 entity_1_is_far = false;
+
+                // compute centers of mass
+                let mass_center_1 = global_shape_1.as_ref().unwrap().centroid();
+                let mass_center_2 = global_shape_2.centroid();
 
                 // invalidate cache since it will change with the reaction
                 hitbox_1 = None;
                 global_shape_1 = None;
 
-                let (translation_1, translation_2) = world.engine.translation.get2_mut(entity_1, entity_2);
-                let (rotation_1, rotation_2) = world.engine.rotation.get2_mut(entity_1, entity_2);
+                let (mut translation_1, mut translation_2) = world.engine.translation.get2_mut(entity_1, entity_2);
+                let (mut rotation_1, mut rotation_2) = world.engine.rotation.get2_mut(entity_1, entity_2);
 
                 // println!("{entity_1}-{entity_2} computing reaction");
-                physics::compute_reaction(
-                    normal,
-                    contact_point,
-                    mass_center_1,
-                    mass_center_2,
-                    translation_1,
-                    translation_2,
-                    rotation_1,
-                    rotation_2,
-                    surface_1,
-                    surface_2,
-                );
+                let mut contact_point_and_compute_reaction =
+                    |normal: math::Vec2, cave_part_idx_1: usize, cave_part_idx_2: usize| -> Result<_, base::GeometryError> {
+                        let contact_point = physics::compute_contact_point(
+                            normal,
+                            pos_1,
+                            pos_2,
+                            rot_mat_1,
+                            rot_mat_2,
+                            lin_vel_1,
+                            lin_vel_2,
+                            ang_vel_1,
+                            ang_vel_2,
+                            body_1,
+                            body_2,
+                            cave_part_idx_1,
+                            cave_part_idx_2,
+                            step,
+                        )?;
+
+                        physics::compute_reaction(
+                            normal,
+                            contact_point,
+                            mass_center_1,
+                            mass_center_2,
+                            translation_1.as_deref_mut(),
+                            translation_2.as_deref_mut(),
+                            rotation_1.as_deref_mut(),
+                            rotation_2.as_deref_mut(),
+                            surface_1,
+                            surface_2,
+                        );
+
+                        Ok(())
+                    };
+
+                match sat_collision {
+                    SatCollision::Cvx(cvx_collision) => {
+                        contact_point_and_compute_reaction(cvx_collision.normal, 0, 0)?;
+                    }
+                    SatCollision::Cave(cave_collisions) => {
+                        for cave_collision in cave_collisions {
+                            contact_point_and_compute_reaction(
+                                cave_collision.normal,
+                                cave_collision.cave_part_idx_1,
+                                cave_collision.cave_part_idx_2,
+                            )?;
+                        }
+                    }
+                }
 
                 // update lin_vel and ang_vel for entity_1 since they are cached for the duration of the inner loop
                 // note how we can't just set them to None, since the solver would then treat them as non-existing
