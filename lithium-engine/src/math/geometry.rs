@@ -106,19 +106,6 @@ impl HitBox {
     pub fn set_max_y(&mut self, new_max_y: f32) {
         self.max_y = new_max_y;
     }
-
-    #[inline]
-    pub fn add_pos(self, pos: math::Vec2) -> Self {
-        Self::new(self.min_x + pos.x, self.min_y + pos.y, self.max_x + pos.x, self.max_y + pos.y)
-    }
-
-    #[inline]
-    pub fn add_pos_mut(&mut self, pos: math::Vec2) {
-        self.min_x += pos.x;
-        self.min_y += pos.y;
-        self.max_x += pos.x;
-        self.max_y += pos.y;
-    }
 }
 
 impl fmt::Display for HitBox {
@@ -754,8 +741,8 @@ impl Triangle {
     }
 
     #[inline]
-    pub fn contains_vec2(&self, vec2: math::Vec2) -> bool {
-        vec2.is_inside_3_vec2(self.a, self.b, self.c)
+    pub fn contains_vec2(&self, vec: math::Vec2) -> bool {
+        vec.is_inside_3_vec2(self.a, self.b, self.c)
     }
 }
 

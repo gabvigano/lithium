@@ -3,30 +3,30 @@ use lithium_engine::{
     prelude,
 };
 
-use macroquad::{
-    input::{is_mouse_button_pressed, is_mouse_button_released},
-    prelude as mq_prelude,
-};
+use std::fmt::Write;
+use std::fs;
+use std::path::Path;
+use std::time::Instant;
 
-use std::{fmt::Write, fs, path::Path};
+const WIDTH: usize = 1600;
+const HEIGHT: usize = 900;
+const FPS: usize = 60;
+const BG_COLOR: u32 = 0x000000;
 
-const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
-const TICKS_PER_FRAME: usize = 15;
-const STEP: f32 = 1.0 / (TICKS_PER_FRAME as f32);
+const STEPS_PER_TICK: usize = 15;
+const STEP: f32 = 1.0 / (STEPS_PER_TICK as f32);
 const MAX_COLLISION_ITERATIONS: usize = 10;
 
-fn get_window_config() -> mq_prelude::Conf {
-    mq_prelude::Conf {
-        window_title: String::from("lithium-editor"),
-        window_width: 1600,
-        window_height: 900,
-        window_resizable: true,
-        ..Default::default()
-    }
-}
+const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
 
-#[macroquad::main(get_window_config())]
-async fn main() {
+fn main() {
+    // initialize window
+    let mut window =
+        prelude::minifb::Window::new("lithium-engine: editor", WIDTH, HEIGHT, prelude::minifb::WindowOptions::default()).unwrap();
+    let mut frame_buffer = prelude::FrameBuffer::new((WIDTH, HEIGHT), BG_COLOR);
+
+    window.set_target_fps(FPS);
+
     // initialize environment
     let mut entity_manager = prelude::EntityManager::new();
     let mut world = prelude::World::default();
@@ -51,27 +51,36 @@ async fn main() {
     let mut hot_reload_caches = load_assets(&mut world, &mut entity_manager);
 
     // create camera
-    let (screen_width, screen_height) = (mq_prelude::screen_width(), mq_prelude::screen_height());
     let mut camera = prelude::Camera::new(
         prelude::Vec2::ZERO,
-        prelude::Rect::new_checked(screen_width, screen_height).unwrap(),
+        prelude::Rect::new_checked(WIDTH as f32, HEIGHT as f32).unwrap(),
     );
-    *camera.pos_mut() = prelude::Vec2::new(-screen_width / 2.0, -screen_height / 2.0);
+    *camera.pos_mut() = prelude::Vec2::new(-(WIDTH as f32) / 2.0, -(HEIGHT as f32) / 2.0);
+
+    let mut frame_start = Instant::now();
+    let mut frame_idx = 1;
+    let hot_reload_frames = 10;
 
     // create mouse pointer
+    let mut prev_pointer_down = false;
     let mut pointer_pos = prelude::Vec2::ZERO;
     let mut pointer_rel_pos = prelude::Vec2::ZERO;
     let mut dragging_entity = None;
 
-    loop {
+    while window.is_open() && !window.is_key_down(prelude::minifb::Key::Escape) {
         // empty frame
-        mq_prelude::clear_background(mq_prelude::BLACK);
+        frame_buffer.clean_screen(BG_COLOR);
 
         // hot reload
-        for cache in hot_reload_caches.iter_mut() {
-            if let Err(err) = prelude::hot_reload(cache, &mut world, &mut entity_manager, None, None) {
-                println!("error hot reloading: {err}")
+        if frame_idx == hot_reload_frames {
+            for cache in hot_reload_caches.iter_mut() {
+                if let Err(err) = prelude::hot_reload(cache, &mut world, &mut entity_manager, None, None) {
+                    println!("error hot reloading: {err}")
+                }
             }
+            frame_idx = 1;
+        } else {
+            frame_idx += 1;
         }
 
         // reset force
@@ -81,29 +90,28 @@ async fn main() {
         }
 
         // get mouse pos
-        (pointer_pos.x, pointer_pos.y) = mq_prelude::mouse_position();
+        (pointer_pos.x, pointer_pos.y) = window.get_mouse_pos(prelude::minifb::MouseMode::Clamp).unwrap();
         (pointer_pos.x, pointer_pos.y) = (pointer_pos.x + camera.pos().x, pointer_pos.y + camera.pos().y);
 
         // commands
-        let delta_move =
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::LeftShift) || mq_prelude::is_key_down(mq_prelude::KeyCode::RightShift) {
-                20.0
-            } else {
-                5.0
-            };
-        if mq_prelude::is_key_down(mq_prelude::KeyCode::Up) || mq_prelude::is_key_down(mq_prelude::KeyCode::W) {
+        let delta_move = if window.is_key_down(prelude::minifb::Key::LeftShift) || window.is_key_down(prelude::minifb::Key::RightShift) {
+            20.0
+        } else {
+            5.0
+        };
+        if window.is_key_down(prelude::minifb::Key::Up) || window.is_key_down(prelude::minifb::Key::W) {
             camera.pos_mut().y -= delta_move;
         }
-        if mq_prelude::is_key_down(mq_prelude::KeyCode::Down) || mq_prelude::is_key_down(mq_prelude::KeyCode::S) {
+        if window.is_key_down(prelude::minifb::Key::Down) || window.is_key_down(prelude::minifb::Key::S) {
             camera.pos_mut().y += delta_move;
         }
-        if mq_prelude::is_key_down(mq_prelude::KeyCode::Right) || mq_prelude::is_key_down(mq_prelude::KeyCode::D) {
+        if window.is_key_down(prelude::minifb::Key::Right) || window.is_key_down(prelude::minifb::Key::D) {
             camera.pos_mut().x += delta_move;
         }
-        if mq_prelude::is_key_down(mq_prelude::KeyCode::Left) || mq_prelude::is_key_down(mq_prelude::KeyCode::A) {
+        if window.is_key_down(prelude::minifb::Key::Left) || window.is_key_down(prelude::minifb::Key::A) {
             camera.pos_mut().x -= delta_move;
         }
-        if mq_prelude::is_key_pressed(mq_prelude::KeyCode::R) {
+        if window.is_key_pressed(prelude::minifb::Key::R, prelude::minifb::KeyRepeat::No) {
             // reset environment
             entity_manager.reset();
             world = prelude::World::default();
@@ -111,13 +119,16 @@ async fn main() {
             // load game map
             hot_reload_caches = load_assets(&mut world, &mut entity_manager);
         }
-        if mq_prelude::is_key_pressed(mq_prelude::KeyCode::P) {
+        if window.is_key_pressed(prelude::minifb::Key::P, prelude::minifb::KeyRepeat::No) {
             simulate = !simulate;
         }
-        if mq_prelude::is_key_pressed(mq_prelude::KeyCode::Escape) {
-            panic!("user panicked")
-        }
-        if is_mouse_button_pressed(mq_prelude::MouseButton::Left) {
+
+        let pointer_down = window.get_mouse_down(prelude::minifb::MouseButton::Left);
+        let pointer_pressed = pointer_down && !prev_pointer_down;
+        let pointer_released = !pointer_down && prev_pointer_down;
+        prev_pointer_down = pointer_down;
+
+        if pointer_pressed {
             // drag stuff
             let mats = world.engine.material.get_comps();
             let ents = world.engine.material.get_ents();
@@ -147,12 +158,12 @@ async fn main() {
                 }
             }
         }
-        if is_mouse_button_released(mq_prelude::MouseButton::Left) {
+        if pointer_released {
             dragging_entity = None;
         }
 
         if simulate {
-            for _ in 0..TICKS_PER_FRAME {
+            for _ in 0..STEPS_PER_TICK {
                 prelude::integrate_all_lin_vel(&mut world, STEP);
                 prelude::integrate_all_ang_vel(&mut world, STEP);
                 prelude::reset_all_rest(&mut world);
@@ -172,18 +183,17 @@ async fn main() {
         }
 
         // render entities
-        prelude::render(&mut world, &camera);
+        frame_buffer.rasterize_all(&world, &camera).unwrap();
 
         // render text
-        let fps = mq_prelude::get_fps();
-        mq_prelude::draw_multiline_text(
-            &format!("FPS: {}\nTPS: {}", fps, fps * TICKS_PER_FRAME as i32),
-            mq_prelude::screen_width() - 70.0,
-            25.0,
-            16.0,
-            None,
-            mq_prelude::WHITE,
-        );
+        let frame_end = Instant::now();
+        let elapsed = frame_end - frame_start;
+
+        let fps = 1.0 / (elapsed.as_nanos() as f64 / 1_000_000_000 as f64);
+        let fps_text = format!("fps: {}\nspt: {}", fps as usize, STEPS_PER_TICK);
+
+        frame_buffer.rasterize_text(&fps_text, (WIDTH - 140, 25), 2, 0xFFFFFF);
+        frame_start = frame_end;
 
         let mut msg = String::new();
         _ = write!(msg, "{}\n", camera.pos());
@@ -197,8 +207,9 @@ async fn main() {
             dragging_entity
         );
         _ = write!(msg, "- Esc to quit\n");
-        mq_prelude::draw_multiline_text(&msg, 20.0, 25.0, 16.0, None, mq_prelude::WHITE);
 
-        mq_prelude::next_frame().await;
+        frame_buffer.rasterize_text(&msg, (20, 25), 2, 0xFFFFFF);
+
+        window.update_with_buffer(frame_buffer.buffer(), WIDTH, HEIGHT).unwrap();
     }
 }

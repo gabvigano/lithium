@@ -1,5 +1,5 @@
 use crate::math::Centroid;
-use crate::{base, math};
+use crate::{base, math, render};
 
 use std::{any::Any, fmt};
 
@@ -491,26 +491,26 @@ impl From<BodySpec> for Body {
 
 #[derive(Deserialize)]
 pub struct MaterialSpec {
-    pub color: math::Color,
+    pub color: render::Color,
     pub layer: usize,
     pub show: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
 pub struct Material {
-    pub(crate) color: math::Color,
+    pub(crate) color: render::Color,
     pub(crate) layer: usize,
     pub(crate) show: bool,
 }
 
 impl Material {
     #[inline]
-    pub const fn new(color: math::Color, layer: usize, show: bool) -> Self {
+    pub const fn new(color: render::Color, layer: usize, show: bool) -> Self {
         Self { color, layer, show }
     }
 
     #[inline]
-    pub fn color(&self) -> math::Color {
+    pub fn color(&self) -> render::Color {
         self.color
     }
 
@@ -525,7 +525,7 @@ impl Material {
     }
 
     #[inline]
-    pub fn color_mut(&mut self) -> &mut math::Color {
+    pub fn color_mut(&mut self) -> &mut render::Color {
         &mut self.color
     }
 

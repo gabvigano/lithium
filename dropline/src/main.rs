@@ -1,14 +1,33 @@
 use lithium_engine::prelude;
 
 use std::fmt::Write;
+use std::time::Instant;
 
-use macroquad::prelude as mq_prelude;
+const WIDTH: usize = 1600;
+const HEIGHT: usize = 900;
+const FPS: usize = 60;
+const BG_COLOR: u32 = 0x000000;
 
-const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
-const TICKS_PER_FRAME: usize = 15;
-const STEP: f32 = 1.0 / (TICKS_PER_FRAME as f32);
+const STEPS_PER_TICK: usize = 15;
+const STEP: f32 = 1.0 / (STEPS_PER_TICK as f32);
 const MAX_COLLISION_ITERATIONS: usize = 10;
 
+const GRAVITY: prelude::Vec2 = prelude::Vec2 { x: 0.0, y: 0.3 };
+
+// if you are on hyprland, to make the window float, add this to your hyprland config:
+//
+// hl.on("window.title", function(window)
+//     if window ~= nil and window.title:match("^lithium%-engine:") then
+//         hl.dispatch(hl.dsp.window.float({
+//             action = "set",
+//         }))
+
+//         hl.dispatch(hl.dsp.window.center())
+//     end
+// end)
+//
+// this makes hyprland listen for window changes, and if the window's title matches "lithium-engine:" it automatically makes it float and centers it
+// --------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // this is an example of how to define a custom component, how to add it to the world, how to access its SparseSet and how to attach it to an entity using the map file
 //
 // 1) first we define our component struct (careful not to use an already existing component name, otherwise the loader overwrite the existing component)
@@ -96,31 +115,23 @@ const MAX_COLLISION_ITERATIONS: usize = 10;
 // - prelude::new_loader::hot_reload(&mut map_cache, &mut world, &mut entity_manager, None, None)
 // + prelude::new_loader::hot_reload(&mut map_cache, &mut world, &mut entity_manager, Some(match_user_upsert), Some(match_user_remove))
 
-fn get_window_config() -> mq_prelude::Conf {
-    mq_prelude::Conf {
-        window_title: String::from("dropline"),
-        window_width: 1600,
-        window_height: 900,
-        window_resizable: false,
-        ..Default::default()
-    }
-}
-
-fn init_world() -> prelude::World<0> {
-    prelude::World::default()
-}
-
-#[macroquad::main(get_window_config())]
-async fn main() {
+fn main() {
     println!(
         "welcome to dropline!\nplease make sure you are running the game from lithium/dropline/ (current dir: {})",
         std::env::current_dir().unwrap().display()
     );
 
+    // initialize window
+    let mut window =
+        prelude::minifb::Window::new("lithium-engine: dropline", WIDTH, HEIGHT, prelude::minifb::WindowOptions::default()).unwrap();
+    let mut frame_buffer = prelude::FrameBuffer::new((WIDTH, HEIGHT), BG_COLOR);
+
+    window.set_target_fps(FPS);
+
     // initialize environment
     let mut pause = false;
     let mut entity_manager = prelude::EntityManager::new();
-    let mut world = init_world();
+    let mut world = prelude::World::default();
 
     // load game map
     let map_path = "assets/map.yaml";
@@ -132,18 +143,19 @@ async fn main() {
     // create camera
     let mut camera = prelude::Camera::new(
         prelude::Vec2::new(0.0, -100.0),
-        prelude::Rect::new_checked(mq_prelude::screen_width(), mq_prelude::screen_height()).expect("error creating camera"),
+        prelude::Rect::new_checked(WIDTH as f32, HEIGHT as f32).expect("error creating camera"),
     );
 
+    let mut frame_start = Instant::now();
     let mut frame_idx = 1;
     let hot_reload_frames = 10;
 
     // game loop
-    loop {
+    while window.is_open() && !window.is_key_down(prelude::minifb::Key::Escape) {
         // empty frame
-        mq_prelude::clear_background(mq_prelude::BLACK);
+        frame_buffer.clean_screen(BG_COLOR);
 
-        // reload
+        // hot reload
         if frame_idx == hot_reload_frames {
             if let Err(err) = prelude::hot_reload(&mut map_cache, &mut world, &mut entity_manager, None, None) {
                 println!("error hot reloading: {err}")
@@ -159,37 +171,34 @@ async fn main() {
             prelude::set_all_ang_acc(&mut world, 0.0);
 
             // handle user inputs
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::W) && world.engine().translation.get(player).unwrap().rest() {
+            if window.is_key_down(prelude::minifb::Key::W) && world.engine().translation.get(player).unwrap().rest() {
                 prelude::apply_lin_vel_axis(&mut world, player, -12.0, prelude::Axis::Y);
                 prelude::clamp_min(&mut world.engine_mut().translation.get_mut(player).unwrap().lin_vel_mut().y, -12.0);
             }
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::D) {
+            if window.is_key_down(prelude::minifb::Key::D) {
                 prelude::apply_lin_vel_axis(&mut world, player, 1.0, prelude::Axis::X).unwrap();
                 prelude::clamp_max(&mut world.engine_mut().translation.get_mut(player).unwrap().lin_vel_mut().x, 12.0);
             }
-            if mq_prelude::is_key_down(mq_prelude::KeyCode::A) {
+            if window.is_key_down(prelude::minifb::Key::A) {
                 prelude::apply_lin_vel_axis(&mut world, player, -1.0, prelude::Axis::X).unwrap();
                 prelude::clamp_min(&mut world.engine_mut().translation.get_mut(player).unwrap().lin_vel_mut().x, -12.0);
             }
-            if mq_prelude::is_key_pressed(mq_prelude::KeyCode::R) {
+            if window.is_key_pressed(prelude::minifb::Key::R, prelude::minifb::KeyRepeat::No) {
                 // reset environment
                 entity_manager.reset();
-                world = init_world();
+                world = prelude::World::default();
 
                 // load game map
                 map_cache = prelude::load(map_path, &mut world, &mut entity_manager, None).unwrap();
             }
         }
-        if mq_prelude::is_key_pressed(mq_prelude::KeyCode::P) {
+        if window.is_key_pressed(prelude::minifb::Key::P, prelude::minifb::KeyRepeat::No) {
             pause = !pause;
-        }
-        if mq_prelude::is_key_pressed(mq_prelude::KeyCode::Escape) {
-            panic!("user panicked")
         }
 
         if !pause {
             // update world and camera
-            for _ in 0..TICKS_PER_FRAME {
+            for _ in 0..STEPS_PER_TICK {
                 prelude::integrate_all_lin_vel(&mut world, STEP);
                 prelude::integrate_all_ang_vel(&mut world, STEP);
                 prelude::reset_all_rest(&mut world);
@@ -204,18 +213,17 @@ async fn main() {
         }
 
         // render entities
-        prelude::render(&mut world, &camera);
+        frame_buffer.rasterize_all(&world, &camera).unwrap();
 
         // render text
-        let fps = mq_prelude::get_fps();
-        mq_prelude::draw_multiline_text(
-            &format!("FPS: {}\nTPS: {}", fps, fps * TICKS_PER_FRAME as i32),
-            mq_prelude::screen_width() - 70.0,
-            25.0,
-            16.0,
-            None,
-            mq_prelude::WHITE,
-        );
+        let frame_end = Instant::now();
+        let elapsed = frame_end - frame_start;
+
+        let fps = 1.0 / (elapsed.as_nanos() as f64 / 1_000_000_000 as f64);
+        let fps_text = format!("fps: {}\nspt: {}", fps as usize, STEPS_PER_TICK);
+
+        frame_buffer.rasterize_text(&fps_text, (WIDTH - 140, 25), 2, 0xFFFFFF);
+        frame_start = frame_end;
 
         let mut msg = String::new();
         _ = write!(msg, "pause: {}\n\n", pause);
@@ -249,20 +257,8 @@ async fn main() {
             None => (),
         }
 
-        mq_prelude::draw_multiline_text(&msg, 20.0, 25.0, 16.0, None, mq_prelude::WHITE);
+        frame_buffer.rasterize_text(&msg, (20, 25), 1, 0xFFFFFF);
 
-        // prelude::render_vector(
-        //     world.transform.get(player).expect("missing transform").pos(),
-        //     world.translation.get(player).expect("missing translation").lin_vel(),
-        //     Some(5.0),
-        //     &camera,
-        //     mq_prelude::RED,
-        //     false,
-        // );
-
-        // std::thread::sleep(std::time::Duration::from_millis(50));
-        // println!("\n\nFRAME ENDED, PRESS ENTER TO CONTINUE\n\n");
-        // std::io::stdin().read_line(&mut String::new()).expect("failed to read");
-        mq_prelude::next_frame().await;
+        window.update_with_buffer(frame_buffer.buffer(), WIDTH, HEIGHT).unwrap();
     }
 }
