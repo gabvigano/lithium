@@ -4,7 +4,11 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
-serde_yaml = "*"
+serde_yaml = "0.9"
 serde = { version = "1.0", features = ["derive"] }
-bincode = "2"
-minifb = "0.28"
+minifb = { version = "0.28", optional = true }
+bincode = { version = "2", optional = true }
+
+[features]
+render = ["dep:minifb"]
+network = ["dep:bincode"]

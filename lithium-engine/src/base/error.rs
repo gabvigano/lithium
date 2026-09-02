@@ -163,8 +163,10 @@ pub enum NetworkError {
     NetworkUnreachable,
     PermissionDenied,
     AddressInUse,
-    SerializationError(bincode::error::EncodeError),
     Io(io::Error),
+
+    #[cfg(feature = "network")]
+    SerializationError(bincode::error::EncodeError),
 }
 
 impl error::Error for NetworkError {}
@@ -176,8 +178,10 @@ impl fmt::Display for NetworkError {
             NetworkError::NetworkUnreachable => write!(f, "the network is unreachable"),
             NetworkError::PermissionDenied => write!(f, "permission denied"),
             NetworkError::AddressInUse => write!(f, "address is already in use"),
-            NetworkError::SerializationError(e) => write!(f, "serialization error: {e}"),
             NetworkError::Io(e) => write!(f, "{e}"),
+
+            #[cfg(feature = "network")]
+            NetworkError::SerializationError(e) => write!(f, "serialization error: {e}"),
         }
     }
 }
@@ -194,6 +198,7 @@ impl From<io::Error> for NetworkError {
     }
 }
 
+#[cfg(feature = "network")]
 impl From<bincode::error::EncodeError> for NetworkError {
     fn from(e: bincode::error::EncodeError) -> Self {
         Self::SerializationError(e)

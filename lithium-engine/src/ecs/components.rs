@@ -1,10 +1,12 @@
 use crate::math::Centroid;
-use crate::{base, math, render};
+use crate::{base, math};
 
 use std::{any::Any, fmt};
 
-use bincode::{Decode, Encode};
 use serde::Deserialize;
+
+#[cfg(feature = "network")]
+use bincode::{Decode, Encode};
 
 pub trait UserComponent: Any + 'static {
     fn as_any(&self) -> &dyn Any;
@@ -16,7 +18,8 @@ pub struct TransformSpec {
     pub pos: math::Vec2,
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Transform {
     pub(crate) pos: math::Vec2,
 }
@@ -66,7 +69,8 @@ impl RotationMatrixSpec {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct RotationMatrix {
     pub(crate) rot_mat: math::Mat2x3,
 }
@@ -152,7 +156,8 @@ pub struct TranslationSpec {
     pub mass: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Translation {
     pub(crate) lin_vel: math::Vec2,
     pub(crate) force: math::Vec2,
@@ -283,7 +288,8 @@ pub struct RotationSpec {
     pub inertia: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Rotation {
     pub(crate) ang_vel: f32,
     pub(crate) torque: f32,
@@ -378,7 +384,8 @@ pub struct SurfaceSpec {
     pub kinetic_friction: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Surface {
     pub(crate) elast: f32,
     pub(crate) static_friction: f32,
@@ -447,7 +454,8 @@ pub struct BodySpec {
     pub shape: math::Shape,
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Body {
     pub(crate) shape: math::Shape,
     pub(crate) centroid: math::Vec2,
@@ -489,28 +497,56 @@ impl From<BodySpec> for Body {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
+pub struct Color {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
+}
+
+impl Color {
+    #[inline]
+    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
+        Self { r, g, b, a }
+    }
+
+    #[inline]
+    pub fn to_hex(&self) -> u32 {
+        ((self.r as u32) << 16) | ((self.g as u32) << 8) | self.b as u32
+    }
+}
+
+impl fmt::Display for Color {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "rgba ({}, {}, {}, {})", self.r, self.g, self.b, self.a)
+    }
+}
+
 #[derive(Deserialize)]
 pub struct MaterialSpec {
-    pub color: render::Color,
+    pub color: Color,
     pub layer: usize,
     pub show: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Material {
-    pub(crate) color: render::Color,
+    pub(crate) color: Color,
     pub(crate) layer: usize,
     pub(crate) show: bool,
 }
 
 impl Material {
     #[inline]
-    pub const fn new(color: render::Color, layer: usize, show: bool) -> Self {
+    pub const fn new(color: Color, layer: usize, show: bool) -> Self {
         Self { color, layer, show }
     }
 
     #[inline]
-    pub fn color(&self) -> render::Color {
+    pub fn color(&self) -> Color {
         self.color
     }
 
@@ -525,7 +561,7 @@ impl Material {
     }
 
     #[inline]
-    pub fn color_mut(&mut self) -> &mut render::Color {
+    pub fn color_mut(&mut self) -> &mut Color {
         &mut self.color
     }
 

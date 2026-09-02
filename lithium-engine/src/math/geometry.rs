@@ -2,8 +2,10 @@ use crate::{base, math};
 
 use std::{cell::OnceCell, fmt, mem};
 
-use bincode::{Decode, Encode};
 use serde::Deserialize;
+
+#[cfg(feature = "network")]
+use bincode::{Decode, Encode};
 
 #[derive(Debug, Clone)]
 pub struct HitBox {
@@ -227,7 +229,8 @@ pub fn convex_hull(mut verts: &mut [math::Vec2]) -> Result<CvxPoly, base::Geomet
     Ok(CvxPoly::new_unchecked(hull))
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub enum Shape {
     Segment(Segment),
     Triangle(Triangle),
@@ -433,7 +436,8 @@ impl fmt::Display for Shape {
 }
 
 /// notice that a and b are local positions, you may need to manually integrate them with a position
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Segment {
     pub(crate) a: math::Vec2,
     pub(crate) b: math::Vec2,
@@ -674,7 +678,8 @@ impl fmt::Display for Segment {
 }
 
 /// notice that a, b and c are local positions, you may need to manually integrate them with a position
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Triangle {
     pub(crate) a: math::Vec2,
     pub(crate) b: math::Vec2,
@@ -929,7 +934,8 @@ impl fmt::Display for Triangle {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Rect {
     pub(crate) width: f32,
     pub(crate) height: f32,
@@ -993,7 +999,8 @@ impl fmt::Display for Rect {
 }
 
 /// notice that a, b, c and d are local positions, you may need to manually integrate them with a position
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Quad {
     pub(crate) a: math::Vec2,
     pub(crate) b: math::Vec2,
@@ -1288,7 +1295,8 @@ impl fmt::Display for Quad {
 
 /// cvx_poly must be convex, vertices must be stored counterclockwise, and there must be no collinear or duplicate vertices
 /// notice that vertices are local positions, you may need to manually integrate them with a position
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct CvxPoly {
     pub(crate) verts: Vec<math::Vec2>,
 }
@@ -1631,6 +1639,7 @@ impl PartialEq for CaveCache {
     }
 }
 
+#[cfg(feature = "network")]
 impl Encode for CaveCache {
     #[inline]
     fn encode<E: bincode::enc::Encoder>(&self, _encoder: &mut E) -> Result<(), bincode::error::EncodeError> {
@@ -1638,6 +1647,7 @@ impl Encode for CaveCache {
     }
 }
 
+#[cfg(feature = "network")]
 impl<Context> Decode<Context> for CaveCache {
     #[inline]
     fn decode<D: bincode::de::Decoder<Context = Context>>(_decoder: &mut D) -> Result<Self, bincode::error::DecodeError> {
@@ -1645,11 +1655,13 @@ impl<Context> Decode<Context> for CaveCache {
     }
 }
 
+#[cfg(feature = "network")]
 bincode::impl_borrow_decode!(CaveCache);
 
 /// cave_poly must not self intersect, vertices must be stored counterclockwise, and there must be no collinear or duplicate vertices
 /// notice that vertices are local positions, you may need to manually integrate them with a position
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct CavePoly {
     pub(crate) verts: Vec<math::Vec2>,
     #[serde(skip)]
@@ -2276,7 +2288,8 @@ impl fmt::Display for CavePoly {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Circle {
     pub(crate) radius: f32,
 }

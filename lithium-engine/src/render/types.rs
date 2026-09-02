@@ -2,34 +2,8 @@ use crate::{math, render};
 
 use std::fmt;
 
+#[cfg(feature = "network")]
 use bincode::{Decode, Encode};
-use serde::Deserialize;
-
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode, Deserialize)]
-pub struct Color {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-}
-
-impl Color {
-    #[inline]
-    pub const fn new(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
-    }
-
-    #[inline]
-    pub fn to_hex(&self) -> u32 {
-        ((self.r as u32) << 16) | ((self.g as u32) << 8) | self.b as u32
-    }
-}
-
-impl fmt::Display for Color {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "rgba ({}, {}, {}, {})", self.r, self.g, self.b, self.a)
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PixelPos {

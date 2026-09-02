@@ -1,7 +1,9 @@
 use std::fmt;
 
-use bincode::{Decode, Encode};
 use serde::Deserialize;
+
+#[cfg(feature = "network")]
+use bincode::{Decode, Encode};
 
 pub const EPS: f32 = 1e-6;
 pub const EPS_SQR: f32 = EPS * EPS;
@@ -37,7 +39,8 @@ pub fn check_segments_intersection(a1: Vec2, a2: Vec2, b1: Vec2, b2: Vec2) -> bo
     d1 * d2 < -EPS && d3 * d4 < -EPS
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Vec2 {
     pub x: f32,
     pub y: f32,
@@ -315,7 +318,8 @@ pub fn dedup_by_approx_equal(slice: &mut [Vec2]) -> &mut [Vec2] {
 /// so some operations (like mat2x3 * mat2x3) that would not even be possible
 /// are done by hardcoding that third row
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Mat2x3 {
     pub x: (f32, f32),
     pub y: (f32, f32),
