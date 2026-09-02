@@ -9,5 +9,3 @@ pub use packets::*;
 pub use server::*;
 pub use shared::*;
 pub use snapshots::*;
-
-pub use bincode;
