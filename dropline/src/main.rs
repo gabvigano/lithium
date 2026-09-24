@@ -8,7 +8,7 @@ const HEIGHT: usize = 900;
 const FPS: usize = 60;
 const BG_COLOR: u32 = 0x000000;
 
-const STEPS_PER_TICK: usize = 15;
+const STEPS_PER_TICK: usize = 5;
 const STEP: f32 = 1.0 / (STEPS_PER_TICK as f32);
 const MAX_COLLISION_ITERATIONS: usize = 10;
 

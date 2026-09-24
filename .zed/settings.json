@@ -1,4 +1,18 @@
 {
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "cargo": {
+          "features": "all",
+          "allTargets": true
+        },
+        "check": {
+          "features": "all",
+          "allTargets": true
+        }
+      }
+    }
+  },
   // disable errors for yaml files to avoid "unresolved tag" errors
   "languages": {
     "YAML": {

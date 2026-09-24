@@ -31,11 +31,11 @@ where
     I: bincode::Encode + bincode::Decode<()> + Send + 'static,
 {
     #[inline]
-    pub fn start(port: u16, server_address: SocketAddr) -> Result<Self, base::NetworkError> {
+    pub fn start(port: u16, server_address: SocketAddr) -> Result<Self, base::EngineError> {
         let ip = network::get_local_ip();
         let address = SocketAddr::new(ip, port);
-        let socket = UdpSocket::bind(address)?;
-        let address = socket.local_addr()?;
+        let socket = UdpSocket::bind(address).map_err(base::NetworkError::from)?;
+        let address = socket.local_addr().map_err(base::NetworkError::from)?;
 
         let connected = Arc::new(AtomicBool::new(false));
         let ping_epoch = Instant::now();
@@ -45,11 +45,11 @@ where
         let client = Self {
             address,
             server_address,
-            socket: socket.try_clone()?,
+            socket: socket.try_clone().map_err(base::NetworkError::from)?,
             connected: connected.clone(),
             ping_epoch,
             pings: pings_rx,
-            ping_history: base::CappedVec::new(20),
+            ping_history: base::CappedVec::new(20)?,
             delay: Duration::from_millis(50),
             received_packets: received_packets_rx,
             _marker: PhantomData,
@@ -293,7 +293,7 @@ impl<I: PartialEq> ClientSession<I> {
         }
 
         // rewind
-        let mut rewind_tick = self.last_rewind_snapshot.0;
+        let mut rewind_tick = self.last_rewind_snapshot.0.wrapping_add(1);
         world.engine = self.last_rewind_snapshot.1.engine().clone();
 
         while rewind_tick.is_before(tick) {

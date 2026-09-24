@@ -36,7 +36,7 @@ where
     U: SatCompatible + Centroid,
 {
     fn check_axes<T, U>(
-        sides: &[math::Vec2],
+        axes_geometry: &impl SatCompatible,
         geometry_1: &T,
         geometry_2: &U,
         delta: math::Vec2,
@@ -47,7 +47,13 @@ where
         T: SatCompatible,
         U: SatCompatible,
     {
-        for side in sides {
+        for i in 0..axes_geometry.sides_number() {
+            let side = axes_geometry.side(i);
+
+            if side.square_mag() < math::EPS_SQR {
+                continue;
+            }
+
             let axis = side.perp_ccw().norm();
 
             let (min_1, max_1) = geometry_1.project(axis);
@@ -59,6 +65,7 @@ where
             }
 
             let overlap = (max_1.min(max_2)) - (min_1.max(min_2));
+
             if overlap < *best_overlap {
                 // update the normal data
                 *best_overlap = overlap;
@@ -78,16 +85,9 @@ where
     let mut best_overlap = f32::INFINITY;
     let mut best_normal = math::Vec2::ZERO; // minimum translation vector axis, the axis of the smallest vector to push one shape out of the other
 
-    // vector of sides
-    let mut sides: Vec<math::Vec2> = Vec::with_capacity(geometry_1.sides_number() + geometry_2.sides_number());
-    geometry_1.append_sides(&mut sides);
+    check_axes(geometry_1, geometry_1, geometry_2, delta, &mut best_overlap, &mut best_normal)?;
 
-    check_axes(&sides, geometry_1, geometry_2, delta, &mut best_overlap, &mut best_normal)?;
-
-    sides.clear();
-    geometry_2.append_sides(&mut sides);
-
-    check_axes(&sides, geometry_1, geometry_2, delta, &mut best_overlap, &mut best_normal)?;
+    check_axes(geometry_2, geometry_1, geometry_2, delta, &mut best_overlap, &mut best_normal)?;
 
     Some(CvxCollision {
         // overlap: best_overlap,
@@ -179,7 +179,7 @@ pub fn compute_global_shape(
     step: f32,
 ) -> math::Shape {
     let rot_mat = if matches!(state, State::Static | State::Still) {
-        None
+        rot_mat
     } else {
         pos = match lin_vel {
             Some(lv) => pos.add(lv.scale(step)),

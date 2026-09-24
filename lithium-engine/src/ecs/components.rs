@@ -218,9 +218,15 @@ impl Translation {
     }
 
     #[inline]
-    pub fn set_mass(&mut self, new_mass: f32) {
+    pub fn set_mass(&mut self, new_mass: f32) -> Result<(), base::MathError> {
+        if new_mass <= 0.0 {
+            return Err(base::MathError::NonPositive("mass"));
+        }
+
         self.mass = new_mass;
         self.inv_mass = 1.0 / new_mass;
+
+        Ok(())
     }
 
     #[inline]
@@ -343,9 +349,15 @@ impl Rotation {
     }
 
     #[inline]
-    pub fn set_inertia(&mut self, new_inertia: f32) {
+    pub fn set_inertia(&mut self, new_inertia: f32) -> Result<(), base::MathError> {
+        if new_inertia <= 0.0 {
+            return Err(base::MathError::NonPositive("inertia"));
+        }
+
         self.inertia = new_inertia;
         self.inv_inertia = 1.0 / new_inertia;
+
+        Ok(())
     }
 
     #[inline]

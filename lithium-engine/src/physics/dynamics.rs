@@ -77,13 +77,6 @@ pub fn integrate_all_ang_vel<const N: usize>(world: &mut ecs::World<N>, step: f3
 // helpers wrappers
 
 #[inline]
-pub fn apply_lin_vel_axis<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity, lin_vel: f32, axis: math::Axis) -> Option<()> {
-    world.engine.translation.get_mut(entity)?.apply_lin_vel_axis(lin_vel, axis);
-
-    Some(())
-}
-
-#[inline]
 pub fn apply_lin_vel<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity, lin_vel: math::Vec2) -> Option<()> {
     world.engine.translation.get_mut(entity)?.apply_lin_vel(lin_vel);
 
@@ -91,8 +84,8 @@ pub fn apply_lin_vel<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Ent
 }
 
 #[inline]
-pub fn apply_force_axis<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity, force: f32, axis: math::Axis) -> Option<()> {
-    world.engine.translation.get_mut(entity)?.apply_force_axis(force, axis);
+pub fn apply_lin_vel_axis<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity, lin_vel: f32, axis: math::Axis) -> Option<()> {
+    world.engine.translation.get_mut(entity)?.apply_lin_vel_axis(lin_vel, axis);
 
     Some(())
 }
@@ -100,6 +93,13 @@ pub fn apply_force_axis<const N: usize>(world: &mut ecs::World<N>, entity: ecs::
 #[inline]
 pub fn apply_force<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity, force: math::Vec2) -> Option<()> {
     world.engine.translation.get_mut(entity)?.apply_force(force);
+
+    Some(())
+}
+
+#[inline]
+pub fn apply_force_axis<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Entity, force: f32, axis: math::Axis) -> Option<()> {
+    world.engine.translation.get_mut(entity)?.apply_force_axis(force, axis);
 
     Some(())
 }
@@ -121,31 +121,17 @@ pub fn apply_torque<const N: usize>(world: &mut ecs::World<N>, entity: ecs::Enti
 // extra helpers
 
 #[inline]
-pub fn apply_force_at_point_axis<const N: usize>(
-    world: &mut ecs::World<N>,
-    entity: ecs::Entity,
-    force: f32,
-    axis: math::Axis,
-    point: math::Vec2,
-) -> Option<()> {
-    let mass_center = world.engine.body.get(entity)?.centroid();
-    let arm = point.sub(mass_center);
-
-    apply_force_axis(world, entity, force, axis)?;
-
-    let force_vector = match axis {
-        math::Axis::X => math::Vec2::new(force, 0.0),
-        math::Axis::Y => math::Vec2::new(0.0, force),
+pub fn local_point_to_world<const N: usize>(world: &ecs::World<N>, entity: ecs::Entity, local_point: math::Vec2) -> math::Vec2 {
+    let mut world_point = match world.engine.rotation_matrix.get(entity) {
+        Some(rotation_matrix) => rotation_matrix.rot_mat().pre_mul_vec2(local_point),
+        None => local_point,
     };
-    let torque = arm.cross(force_vector);
-    let torque_2 = match axis {
-        math::Axis::X => -arm.y * force,
-        math::Axis::Y => arm.x * force,
-    };
-    assert_eq!(torque, torque_2);
-    apply_torque(world, entity, torque)?;
 
-    Some(())
+    if let Some(transform) = world.engine.transform.get(entity) {
+        world_point.add_mut(transform.pos());
+    }
+
+    world_point
 }
 
 #[inline]
@@ -155,15 +141,60 @@ pub fn apply_force_at_point<const N: usize>(
     force: math::Vec2,
     point: math::Vec2,
 ) -> Option<()> {
-    let mass_center = world.engine.body.get(entity)?.centroid();
+    let local_mass_center = world.engine.body.get(entity)?.centroid();
+    let mass_center = local_point_to_world(world, entity, local_mass_center);
+
     let arm = point.sub(mass_center);
-
-    apply_force(world, entity, force)?;
-
     let torque = arm.cross(force);
-    apply_torque(world, entity, torque)?;
+
+    let translation = world.engine.translation.get_mut(entity)?;
+    let rotation = world.engine.rotation.get_mut(entity)?;
+
+    translation.apply_force(force);
+    rotation.apply_torque(torque);
 
     Some(())
+}
+
+#[inline]
+pub fn apply_force_at_point_axis<const N: usize>(
+    world: &mut ecs::World<N>,
+    entity: ecs::Entity,
+    force: f32,
+    axis: math::Axis,
+    point: math::Vec2,
+) -> Option<()> {
+    let force_world = match axis {
+        math::Axis::X => math::Vec2::new(force, 0.0),
+        math::Axis::Y => math::Vec2::new(0.0, force),
+    };
+
+    apply_force_at_point(world, entity, force_world, point)
+}
+
+#[inline]
+pub fn apply_force_at_local_point<const N: usize>(
+    world: &mut ecs::World<N>,
+    entity: ecs::Entity,
+    force: math::Vec2,
+    local_point: math::Vec2,
+) -> Option<()> {
+    let point = local_point_to_world(world, entity, local_point);
+
+    apply_force_at_point(world, entity, force, point)
+}
+
+#[inline]
+pub fn apply_force_at_local_point_axis<const N: usize>(
+    world: &mut ecs::World<N>,
+    entity: ecs::Entity,
+    force: f32,
+    axis: math::Axis,
+    local_point: math::Vec2,
+) -> Option<()> {
+    let point = local_point_to_world(world, entity, local_point);
+
+    apply_force_at_point_axis(world, entity, force, axis, point)
 }
 
 #[inline]

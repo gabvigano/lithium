@@ -2,9 +2,6 @@ use crate::{math, render};
 
 use std::fmt;
 
-#[cfg(feature = "network")]
-use bincode::{Decode, Encode};
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PixelPos {
     pub x: u32,

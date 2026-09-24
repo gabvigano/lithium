@@ -135,7 +135,7 @@ pub trait ToHitBox {
 
 pub trait SatCompatible {
     fn sides_number(&self) -> usize;
-    fn append_sides(&self, sides: &mut Vec<math::Vec2>);
+    fn side(&self, idx: usize) -> math::Vec2;
     fn project(&self, axis: math::Vec2) -> (f32, f32);
     fn split_cave(&self) -> Result<Option<&[CvxPoly]>, base::GeometryError>;
 }
@@ -312,12 +312,12 @@ impl SatCompatible for Shape {
     }
 
     #[inline]
-    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
+    fn side(&self, idx: usize) -> math::Vec2 {
         match self {
-            Shape::Segment(segment) => segment.append_sides(sides),
-            Shape::Triangle(triangle) => triangle.append_sides(sides),
-            Shape::Quad(quad) => quad.append_sides(sides),
-            Shape::CvxPoly(cvx_poly) => cvx_poly.append_sides(sides),
+            Shape::Segment(segment) => segment.side(idx),
+            Shape::Triangle(triangle) => triangle.side(idx),
+            Shape::Quad(quad) => quad.side(idx),
+            Shape::CvxPoly(cvx_poly) => cvx_poly.side(idx),
             Shape::CavePoly(_) => unimplemented!(),
             Shape::Circle(_) => unimplemented!(),
         }
@@ -435,7 +435,7 @@ impl fmt::Display for Shape {
     }
 }
 
-/// notice that a and b are local positions, you may need to manually integrate them with a position
+/// notice that a and b are local positions, you may need to manually integrate them with a position and rotation_matrix
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Segment {
@@ -569,10 +569,11 @@ impl SatCompatible for Segment {
     }
 
     #[inline]
-    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
-        let segment_side = self.b.sub(self.a);
-        if segment_side.square_mag() >= math::EPS_SQR {
-            sides.push(segment_side)
+    fn side(&self, idx: usize) -> math::Vec2 {
+        match idx {
+            0 => self.b.sub(self.a),
+            1 => self.a.sub(self.b),
+            _ => unreachable!(),
         }
     }
 
@@ -677,7 +678,7 @@ impl fmt::Display for Segment {
     }
 }
 
-/// notice that a, b and c are local positions, you may need to manually integrate them with a position
+/// notice that a, b and c are local positions, you may need to manually integrate them with a position and rotation_matrix
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Triangle {
@@ -801,12 +802,12 @@ impl SatCompatible for Triangle {
     }
 
     #[inline]
-    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
-        let triangle_sides = [self.b.sub(self.a), self.c.sub(self.b), self.a.sub(self.c)];
-        for triangle_side in triangle_sides {
-            if triangle_side.square_mag() >= math::EPS_SQR {
-                sides.push(triangle_side);
-            }
+    fn side(&self, idx: usize) -> math::Vec2 {
+        match idx {
+            0 => self.b.sub(self.a),
+            1 => self.c.sub(self.b),
+            2 => self.a.sub(self.c),
+            _ => unreachable!(),
         }
     }
 
@@ -998,7 +999,7 @@ impl fmt::Display for Rect {
     }
 }
 
-/// notice that a, b, c and d are local positions, you may need to manually integrate them with a position
+/// notice that a, b, c and d are local positions, you may need to manually integrate them with a position and rotation_matrix
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct Quad {
@@ -1133,12 +1134,13 @@ impl SatCompatible for Quad {
     }
 
     #[inline]
-    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
-        let quad_sides = [self.b.sub(self.a), self.c.sub(self.b), self.d.sub(self.c), self.a.sub(self.d)];
-        for quad_side in quad_sides {
-            if quad_side.square_mag() >= math::EPS_SQR {
-                sides.push(quad_side);
-            }
+    fn side(&self, idx: usize) -> math::Vec2 {
+        match idx {
+            0 => self.b.sub(self.a),
+            1 => self.c.sub(self.b),
+            2 => self.d.sub(self.c),
+            3 => self.a.sub(self.d),
+            _ => unreachable!(),
         }
     }
 
@@ -1294,7 +1296,7 @@ impl fmt::Display for Quad {
 }
 
 /// cvx_poly must be convex, vertices must be stored counterclockwise, and there must be no collinear or duplicate vertices
-/// notice that vertices are local positions, you may need to manually integrate them with a position
+/// notice that vertices are local positions, you may need to manually integrate them with a position and rotation_matrix
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct CvxPoly {
@@ -1412,16 +1414,8 @@ impl SatCompatible for CvxPoly {
     }
 
     #[inline]
-    fn append_sides(&self, sides: &mut Vec<math::Vec2>) {
-        let verts = &self.verts;
-        let mut prev = *verts.last().unwrap();
-        for &curr in verts {
-            let side = curr.sub(prev);
-            if side.square_mag() >= math::EPS_SQR {
-                sides.push(side);
-            }
-            prev = curr;
-        }
+    fn side(&self, idx: usize) -> math::Vec2 {
+        self.verts[(idx + 1) % self.verts.len()].sub(self.verts[idx])
     }
 
     #[inline]
@@ -1659,7 +1653,7 @@ impl<Context> Decode<Context> for CaveCache {
 bincode::impl_borrow_decode!(CaveCache);
 
 /// cave_poly must not self intersect, vertices must be stored counterclockwise, and there must be no collinear or duplicate vertices
-/// notice that vertices are local positions, you may need to manually integrate them with a position
+/// notice that vertices are local positions, you may need to manually integrate them with a position and rotation_matrix
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[cfg_attr(feature = "network", derive(Encode, Decode))]
 pub struct CavePoly {
@@ -1677,16 +1671,21 @@ impl CavePoly {
         };
 
         cave_poly.validate(warnings)?;
+        cave_poly.populate_cache()?;
 
         Ok(cave_poly)
     }
 
     #[inline]
-    pub const fn new_unchecked(verts: Vec<math::Vec2>) -> Self {
-        Self {
+    pub fn new_unchecked(verts: Vec<math::Vec2>) -> Result<Self, base::GeometryError> {
+        let cave_poly = Self {
             verts,
             cache: CaveCache::new(),
-        }
+        };
+
+        cave_poly.populate_cache()?;
+
+        Ok(cave_poly)
     }
 
     #[inline]
@@ -1696,18 +1695,14 @@ impl CavePoly {
 
     #[inline]
     pub fn set_verts(&mut self, new_verts: Vec<math::Vec2>, warnings: bool) -> Result<(), base::GeometryError> {
-        let new_poly = Self::new_checked(new_verts, warnings)?;
-
-        self.verts = new_poly.verts;
-        self.cache = CaveCache::new();
-
+        *self = Self::new_checked(new_verts, warnings)?;
         Ok(())
     }
 
     #[inline]
-    pub fn set_verts_unchecked(&mut self, new_verts: Vec<math::Vec2>) {
-        self.verts = new_verts;
-        self.cache = CaveCache::new();
+    pub fn set_verts_unchecked(&mut self, new_verts: Vec<math::Vec2>) -> Result<(), base::GeometryError> {
+        *self = Self::new_unchecked(new_verts)?;
+        Ok(())
     }
 
     #[inline]
@@ -2080,7 +2075,7 @@ impl SatCompatible for CavePoly {
     }
 
     #[inline]
-    fn append_sides(&self, _sides: &mut Vec<math::Vec2>) {
+    fn side(&self, _idx: usize) -> math::Vec2 {
         panic!("you cannot use sat on CavePoly directly")
     }
 

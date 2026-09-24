@@ -1,5 +1,5 @@
 use crate::math::Validate;
-use crate::{base, ecs};
+use crate::{base, ecs, math};
 
 use std::{collections::HashMap, fs};
 
@@ -101,12 +101,11 @@ pub fn hot_reload<const N: usize>(
         return Ok(());
     }
 
-    cache.metadata = new_metadata;
-
     let new_raw_file = read_raw_file(path)?;
 
     if new_raw_file == cache.raw_file {
         // file hasn't changed
+        cache.metadata = new_metadata;
         return Ok(());
     }
 
@@ -203,6 +202,7 @@ pub fn hot_reload<const N: usize>(
         }
     };
 
+    cache.metadata = new_metadata;
     cache.raw_file = new_raw_file;
     Ok(())
 }
@@ -246,6 +246,10 @@ fn match_engine_upsert<const N: usize>(
             // normalize vertices: this is much more flexible at the cost of losing information about what causes the error
             body.shape.normalize()?;
             body.shape.validate(true)?;
+
+            if let math::Shape::CavePoly(poly) = &body.shape {
+                poly.populate_cache()?;
+            }
 
             world.engine.body.upsert(entity, body);
             Ok(())

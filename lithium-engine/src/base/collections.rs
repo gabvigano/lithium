@@ -1,3 +1,5 @@
+use crate::base;
+
 use std::collections::{
     VecDeque,
     vec_deque::{Iter, IterMut},
@@ -10,11 +12,15 @@ pub struct CappedVec<T> {
 
 impl<T> CappedVec<T> {
     #[inline]
-    pub fn new(capacity: usize) -> Self {
-        Self {
+    pub fn new(capacity: usize) -> Result<Self, base::MathError> {
+        if capacity == 0 {
+            return Err(base::MathError::NonPositive("capacity"));
+        }
+
+        Ok(Self {
             data: VecDeque::with_capacity(capacity),
             capacity,
-        }
+        })
     }
 
     #[inline]

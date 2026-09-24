@@ -37,7 +37,7 @@ Clone the repository, cd into dropline and run it:
 ```bash
 git clone https://github.com/gabvigano/lithium.git
 cd lithium/dropline
-cargo run
+cargo run --release
 ```
 
 ---

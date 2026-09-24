@@ -145,17 +145,17 @@ pub struct ServerSession<S, I> {
 
 impl<S, I: PartialEq> ServerSession<S, I> {
     #[inline]
-    pub fn new(max_world_snapshots: usize) -> Self {
-        Self {
+    pub fn new(max_world_snapshots: usize) -> Result<Self, base::MathError> {
+        Ok(Self {
             address_map: HashMap::new(),
             ack_tick_map: HashMap::new(),
             input_map: network::InputMap::new(),
             oldest_input: None,
             last_sent_snapshot: ecs::World::default(),
-            world_snapshots: base::CappedVec::new(max_world_snapshots),
+            world_snapshots: base::CappedVec::new(max_world_snapshots)?,
             initial_state_packets: Vec::new(),
             delta_state_snapshots: Vec::new(),
-        }
+        })
     }
 
     #[inline]
